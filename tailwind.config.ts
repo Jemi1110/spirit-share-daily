@@ -47,6 +47,18 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        spiritual: {
+          DEFAULT: "hsl(var(--spiritual))",
+          light: "hsl(var(--spiritual-light))",
+        },
+        prayer: {
+          DEFAULT: "hsl(var(--prayer))",
+          light: "hsl(var(--prayer-light))",
+        },
+        devotional: {
+          DEFAULT: "hsl(var(--devotional))",
+          light: "hsl(var(--devotional-light))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
