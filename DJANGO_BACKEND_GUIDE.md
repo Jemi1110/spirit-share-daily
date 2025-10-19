@@ -7,23 +7,71 @@ This guide provides detailed instructions for creating the Django REST Framework
 ### Install Dependencies
 ```bash
 # Create virtual environment
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install required packages
-pip install django djangorestframework djangorestframework-simplejwt
-pip install django-cors-headers psycopg2-binary pillow
-pip install drf-spectacular  # For API documentation
+pip3 install django djangorestframework djangorestframework-simplejwt
+pip3 install django-cors-headers psycopg2-binary pillow
+pip3 install drf-spectacular  # For API documentation
 ```
 
 ### Create Django Project
 ```bash
 django-admin startproject bibly_backend
 cd bibly_backend
-python manage.py startapp api
+python3 manage.py startapp api
 ```
 
 ## 2. Configure Settings (settings.py)
+
+### 2.1. PostgreSQL Setup on macOS (Recommended)
+
+For a robust backend, it's highly recommended to use PostgreSQL. Here’s how to set it up on your Mac using [Homebrew](https://brew.sh/).
+
+**1. Install and Start PostgreSQL:**
+
+```bash
+# Install PostgreSQL
+brew install postgresql
+
+# Start the PostgreSQL service
+brew services start postgresql
+```
+
+**2. Create the Database and User:**
+
+You'll need a database and a user for your Django application.
+
+```bash
+# Create the database
+createdb bibly_db
+
+# Create a new user (you'll be prompted for a username and password)
+createuser --interactive
+```
+
+When prompted by `createuser`, choose a username (e.g., `bibly_user`) and set a password. Make sure to grant superuser privileges if asked, which can simplify development.
+
+**3. Update `settings.py`:**
+
+Now, update the `DATABASES` configuration in your `bibly_backend/settings.py` file with the credentials you just created.
+
+```python
+# Database (PostgreSQL)
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'bibly_db',
+        'USER': 'your_postgres_username',    # Replace with your username
+        'PASSWORD': 'your_postgres_password', # Replace with your password
+        'HOST': 'localhost',
+        'PORT': '5432',
+    }
+}
+```
+
+Now, back to the rest of the settings.
 
 ```python
 INSTALLED_APPS = [
@@ -82,18 +130,11 @@ SIMPLE_JWT = {
 }
 
 # Database (PostgreSQL recommended)
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'bibly_db',
-        'USER': 'your_username',
-        'PASSWORD': 'your_password',
-        'HOST': 'localhost',
-        'PORT': '5432',
-    }
-}
+# The configuration has been moved to the PostgreSQL setup section above.
 
 # Media files configuration
+# Note: `BASE_DIR` is a variable automatically defined in `settings.py` that points to your project's root directory.
+# Ensure you have `import os` at the top of the file to use `os.path.join`.
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 ```
@@ -599,14 +640,14 @@ if settings.DEBUG:
 AUTH_USER_MODEL = 'api.User'
 
 # Make migrations
-python manage.py makemigrations
-python manage.py migrate
+python3 manage.py makemigrations
+python3 manage.py migrate
 
 # Create superuser
-python manage.py createsuperuser
+python3 manage.py createsuperuser
 
 # Run development server
-python manage.py runserver
+python3 manage.py runserver
 ```
 
 ## 8. Testing the API
