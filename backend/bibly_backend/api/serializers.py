@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import (
-    BibleVersion, Verse, Highlight, Devotional, StudyMaterial,
+    BibleVersion, Verse, Highlight, Devotional, StudyMaterial, Document,
     PrayerRequest, Post, Comment, Blog
 )
 
@@ -112,3 +112,16 @@ class BlogSerializer(serializers.ModelSerializer):
         model = Blog
         fields = '__all__'
         read_only_fields = ['id', 'user', 'created_at', 'updated_at']
+class DocumentSerializer(serializers.ModelSerializer):
+    owner = UserSerializer(read_only=True)
+    collaborators = UserSerializer(many=True, read_only=True)
+    file_size_mb = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = Document
+        fields = [
+            'id', 'name', 'description', 'file', 'file_type', 'file_size', 
+            'file_size_mb', 'is_bible', 'is_public', 'owner', 'collaborators',
+            'tags', 'parsed_content', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'file_type', 'file_size', 'is_bible', 'parsed_content', 'created_at', 'updated_at']

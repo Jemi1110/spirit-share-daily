@@ -1,6 +1,6 @@
 // API service for Django backend integration
 // Replace BASE_URL with your Django backend URL
-const BASE_URL = 'http://localhost:8000/api';
+const BASE_URL = 'http://127.0.0.1:8000/api';
 
 // Token management
 export const getToken = () => localStorage.getItem('access_token');
@@ -21,8 +21,41 @@ async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers,
   });
 
+  // If we get 401 and it's a GET request, try again without token
+  if (!response.ok && response.status === 401 && (!options.method || options.method === 'GET')) {
+    console.log('401 error on GET request, retrying without token...');
+    removeToken(); // Clear invalid token
+    
+    // Retry without Authorization header
+    const headersWithoutAuth: HeadersInit = {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    };
+    
+    const retryResponse = await fetch(`${BASE_URL}${endpoint}`, {
+      ...options,
+      headers: headersWithoutAuth,
+    });
+    
+    if (!retryResponse.ok) {
+      throw new Error(`API Error: ${retryResponse.statusText}`);
+    }
+    
+    // Handle DELETE requests which typically return no content (204)
+    if (retryResponse.status === 204 || options.method === 'DELETE') {
+      return {} as T;
+    }
+    
+    return retryResponse.json();
+  }
+
   if (!response.ok) {
     throw new Error(`API Error: ${response.statusText}`);
+  }
+
+  // Handle DELETE requests which typically return no content (204)
+  if (response.status === 204 || options.method === 'DELETE') {
+    return {} as T;
   }
 
   return response.json();
@@ -31,10 +64,10 @@ async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<
 // Auth endpoints
 export const authAPI = {
   register: (data: { email: string; password: string; username: string }) =>
-    apiCall('/users/register/', { method: 'POST', body: JSON.stringify(data) }),
+    apiCall('/accounts/register/', { method: 'POST', body: JSON.stringify(data) }),
   
   login: async (email: string, password: string) => {
-    const response = await apiCall<{ access: string; refresh: string }>('/users/login/', {
+    const response = await apiCall<{ access: string; refresh: string }>('/auth/login/', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
@@ -52,10 +85,10 @@ export const authAPI = {
 export const bibleAPI = {
   getVersions: () => apiCall('/bible/versions/', { method: 'GET' }),
   getVerses: (params?: { book?: string; chapter?: number; verse?: number }) => {
-    const query = new URLSearchParams(params as any).toString();
-    return apiCall(`/verses/?${query}`, { method: 'GET' });
+    const query = params ? new URLSearchParams(params as any).toString() : '';
+    return apiCall(`/verses/${query ? '?' + query : ''}`, { method: 'GET' });
   },
-  searchVerses: (query: string) => apiCall(`/verses/search/?q=${query}`, { method: 'GET' }),
+  searchVerses: (query: string) => apiCall(`/verses/?search=${encodeURIComponent(query)}`, { method: 'GET' }),
 };
 
 // Highlights endpoints
@@ -110,13 +143,35 @@ export const blogAPI = {
   getAll: () => apiCall('/blogs/', { method: 'GET' }),
   getById: (id: string) => apiCall(`/blogs/${id}/`, { method: 'GET' }),
   create: (data: any) => apiCall('/blogs/', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: string, data: any) => apiCall(`/blogs/${id}/`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id: string) => apiCall(`/blogs/${id}/`, { method: 'DELETE' }),
 };
 
 // User profile endpoints
 export const userAPI = {
-  getProfile: () => apiCall('/users/profile/', { method: 'GET' }),
-  updateProfile: (data: any) => apiCall('/users/profile/', { method: 'PUT', body: JSON.stringify(data) }),
-  follow: (userId: string) => apiCall(`/users/${userId}/follow/`, { method: 'POST' }),
-  unfollow: (userId: string) => apiCall(`/users/${userId}/unfollow/`, { method: 'POST' }),
+  getProfile: () => apiCall('/accounts/profile/', { method: 'GET' }),
+  updateProfile: (data: any) => apiCall('/accounts/profile/', { method: 'PUT', body: JSON.stringify(data) }),
+  follow: (userId: string) => apiCall(`/accounts/${userId}/follow/`, { method: 'POST' }),
+  unfollow: (userId: string) => apiCall(`/accounts/${userId}/unfollow/`, { method: 'POST' }),
+};
+
+// Document endpoints
+export const documentAPI = {
+  getAll: () => apiCall('/documents/', { method: 'GET' }),
+  getById: (id: string) => apiCall(`/documents/${id}/`, { method: 'GET' }),
+  upload: (formData: FormData) => {
+    const token = getToken();
+    return fetch(`${BASE_URL}/documents/`, {
+      method: 'POST',
+      headers: { ...(token && { Authorization: `Bearer ${token}` }) },
+      body: formData,
+    }).then(res => res.json());
+  },
+  update: (id: string, data: any) => apiCall(`/documents/${id}/`, { method: 'PUT', body: JSON.stringify(data) }),
+  delete: (id: string) => apiCall(`/documents/${id}/`, { method: 'DELETE' }),
+  share: (id: string, email: string) => apiCall(`/documents/${id}/share/`, { 
+    method: 'POST', 
+    body: JSON.stringify({ email }) 
+  }),
+  makePublic: (id: string) => apiCall(`/documents/${id}/make_public/`, { method: 'POST' }),
 };

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,29 +7,123 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, BookOpen } from "lucide-react";
+import { Plus, BookOpen, Edit2, Trash2, Save, X, Eye } from "lucide-react";
+import { devotionalAPI } from "@/services/api";
+import { toast } from "sonner";
+
+interface Devotional {
+  id: string;
+  title: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+  user: {
+    id: number;
+    username: string;
+  };
+}
 
 const Devotionals = () => {
+  const navigate = useNavigate();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [newDevotional, setNewDevotional] = useState({ title: "", content: "", verse: "" });
+  const [newDevotional, setNewDevotional] = useState({ title: "", content: "" });
+  const [devotionals, setDevotionals] = useState<Devotional[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ title: "", content: "" });
+  const [submitting, setSubmitting] = useState(false);
 
-  // Mock devotionals
-  const devotionals = [
-    {
-      id: 1,
-      title: "Walking in Faith",
-      preview: "Today we explore what it means to trust God completely...",
-      verse: "Proverbs 3:5-6",
-      date: "March 15, 2024"
-    },
-    {
-      id: 2,
-      title: "Love and Compassion",
-      preview: "Discovering the depth of God's love through serving others...",
-      verse: "1 Corinthians 13:4-7",
-      date: "March 14, 2024"
+  useEffect(() => {
+    loadDevotionals();
+  }, []);
+
+  const loadDevotionals = async () => {
+    try {
+      const data = await devotionalAPI.getAll();
+      setDevotionals(data as Devotional[]);
+    } catch (error) {
+      console.error('Error loading devotionals:', error);
+      toast.error('Failed to load devotionals');
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
+
+  const handleCreateDevotional = async () => {
+    if (!newDevotional.title.trim() || !newDevotional.content.trim()) {
+      toast.error('Please fill in all fields');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await devotionalAPI.create(newDevotional);
+      setNewDevotional({ title: "", content: "" });
+      setIsDialogOpen(false);
+      toast.success('Devotional created successfully!');
+      loadDevotionals();
+    } catch (error) {
+      console.error('Error creating devotional:', error);
+      toast.error('Failed to create devotional');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteDevotional = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this devotional?')) return;
+
+    try {
+      await devotionalAPI.delete(id);
+      toast.success('Devotional deleted successfully!');
+      loadDevotionals();
+    } catch (error) {
+      console.error('Error deleting devotional:', error);
+      toast.error('Failed to delete devotional');
+    }
+  };
+
+  const startEditing = (devotional: Devotional) => {
+    setEditingId(devotional.id);
+    setEditForm({ title: devotional.title, content: devotional.content });
+  };
+
+  const cancelEditing = () => {
+    setEditingId(null);
+    setEditForm({ title: "", content: "" });
+  };
+
+  const handleUpdateDevotional = async (id: string) => {
+    if (!editForm.title.trim() || !editForm.content.trim()) {
+      toast.error('Please fill in all fields');
+      return;
+    }
+
+    try {
+      await devotionalAPI.update(id, editForm);
+      toast.success('Devotional updated successfully!');
+      setEditingId(null);
+      setEditForm({ title: "", content: "" });
+      loadDevotionals();
+    } catch (error) {
+      console.error('Error updating devotional:', error);
+      toast.error('Failed to update devotional');
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString();
+  };
+
+  if (loading) {
+    return (
+      <Layout>
+        <div className="max-w-4xl mx-auto space-y-6">
+          <div className="text-center">Loading devotionals...</div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -56,15 +151,7 @@ const Devotionals = () => {
                     placeholder="Enter devotional title"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="verse">Related Verse</Label>
-                  <Input
-                    id="verse"
-                    value={newDevotional.verse}
-                    onChange={(e) => setNewDevotional({ ...newDevotional, verse: e.target.value })}
-                    placeholder="e.g., John 3:16"
-                  />
-                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="content">Content</Label>
                   <Textarea
@@ -80,8 +167,12 @@ const Devotionals = () => {
                 <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button className="bg-devotional hover:bg-devotional/90" onClick={() => setIsDialogOpen(false)}>
-                  Create
+                <Button 
+                  className="bg-devotional hover:bg-devotional/90" 
+                  onClick={handleCreateDevotional}
+                  disabled={submitting}
+                >
+                  {submitting ? 'Creating...' : 'Create'}
                 </Button>
               </div>
             </DialogContent>
@@ -89,23 +180,105 @@ const Devotionals = () => {
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
-          {devotionals.map((devotional) => (
-            <Card key={devotional.id} className="hover:shadow-lg transition-shadow cursor-pointer border-l-4 border-l-devotional">
-              <CardHeader>
-                <CardTitle className="flex items-start gap-2">
-                  <BookOpen className="h-5 w-5 text-devotional mt-1" />
-                  <span>{devotional.title}</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground mb-3">{devotional.preview}</p>
-                <p className="text-sm font-medium text-spiritual">{devotional.verse}</p>
-              </CardContent>
-              <CardFooter>
-                <p className="text-xs text-muted-foreground">{devotional.date}</p>
-              </CardFooter>
-            </Card>
-          ))}
+          {devotionals.length === 0 ? (
+            <div className="col-span-2 text-center py-8">
+              <p className="text-muted-foreground">No devotionals yet. Create your first one!</p>
+            </div>
+          ) : (
+            devotionals.map((devotional) => (
+              <Card key={devotional.id} className="hover:shadow-lg transition-shadow border-l-4 border-l-devotional">
+                <CardHeader>
+                  <div className="flex justify-between items-start">
+                    <CardTitle className="flex items-start gap-2">
+                      <BookOpen className="h-5 w-5 text-devotional mt-1" />
+                      {editingId === devotional.id ? (
+                        <Input
+                          value={editForm.title}
+                          onChange={(e) => setEditForm({...editForm, title: e.target.value})}
+                          className="text-lg font-semibold"
+                        />
+                      ) : (
+                        <span>{devotional.title}</span>
+                      )}
+                    </CardTitle>
+                    <div className="flex gap-2">
+                      {editingId === devotional.id ? (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleUpdateDevotional(devotional.id)}
+                          >
+                            <Save className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={cancelEditing}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => navigate(`/devotionals/${devotional.id}`)}
+                            title="View full devotional"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => startEditing(devotional)}
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteDevotional(devotional.id)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {editingId === devotional.id ? (
+                    <Textarea
+                      value={editForm.content}
+                      onChange={(e) => setEditForm({...editForm, content: e.target.value})}
+                      className="min-h-[100px]"
+                    />
+                  ) : (
+                    <div 
+                      className="cursor-pointer"
+                      onClick={() => navigate(`/devotionals/${devotional.id}`)}
+                    >
+                      <p className="text-muted-foreground mb-3 hover:text-foreground transition-colors">
+                        {devotional.content.length > 150 
+                          ? devotional.content.substring(0, 150) + '...' 
+                          : devotional.content}
+                      </p>
+                      <p className="text-sm text-spiritual hover:underline">
+                        Read more →
+                      </p>
+                    </div>
+                  )}
+                  <p className="text-sm font-medium text-spiritual mt-3">By {devotional.user.username}</p>
+                </CardContent>
+                <CardFooter>
+                  <p className="text-xs text-muted-foreground">{formatDate(devotional.created_at)}</p>
+                </CardFooter>
+              </Card>
+            ))
+          )}
         </div>
       </div>
     </Layout>

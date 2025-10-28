@@ -96,12 +96,53 @@ class StudyMaterial(models.Model):
     def __str__(self):
         return self.title
 
+class Document(models.Model):
+    """User uploaded documents (PDFs, EPUBs, XMLs, etc.)"""
+    DOCUMENT_TYPES = [
+        ('pdf', 'PDF Document'),
+        ('epub', 'EPUB Book'),
+        ('xml', 'XML Bible'),
+        ('json', 'JSON Bible'),
+        ('txt', 'Text File'),
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    file = models.FileField(upload_to='documents/%Y/%m/')
+    file_type = models.CharField(max_length=10, choices=DOCUMENT_TYPES)
+    file_size = models.BigIntegerField()  # Size in bytes
+    is_bible = models.BooleanField(default=False)
+    is_public = models.BooleanField(default=False)
+    
+    # Collaboration
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='owned_documents')
+    collaborators = models.ManyToManyField(User, related_name='shared_documents', blank=True)
+    
+    # Metadata
+    tags = models.JSONField(default=list, blank=True)
+    parsed_content = models.JSONField(null=True, blank=True)  # For Bible content
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return self.name
+    
+    @property
+    def file_size_mb(self):
+        return round(self.file_size / (1024 * 1024), 2)
+
 class PrayerRequest(models.Model):
     """Prayer requests"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=200)
     description = models.TextField()
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='prayer_requests')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='prayer_requests', null=True, blank=True)
     prayed_by = models.ManyToManyField(User, related_name='prayers_given', blank=True)
     is_answered = models.BooleanField(default=False)
     answered_at = models.DateTimeField(null=True, blank=True)
@@ -116,7 +157,7 @@ class PrayerRequest(models.Model):
 class Post(models.Model):
     """Social media posts"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='posts')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='posts', null=True, blank=True)
     content = models.TextField()
     image = models.ImageField(upload_to='posts/', null=True, blank=True)
     audio = models.FileField(upload_to='posts/audio/', null=True, blank=True)
@@ -150,7 +191,7 @@ class Blog(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=200)
     content = models.TextField()
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='blogs')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='blogs', null=True, blank=True)
     image = models.ImageField(upload_to='blogs/', null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

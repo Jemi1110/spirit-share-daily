@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-y-1ybngg%lmx(&e_%9m%w%760mi@-pvva#^x2a8yw9^1hy_t*0
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0']
 
 
 # Application definition
@@ -64,7 +64,12 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",  # Vite default port
     "http://localhost:3000",
     "http://localhost:8080",  # Added for your frontend
+    "http://localhost:8081",  # Your current frontend port
 ]
+
+# For development, allow all origins (remove in production)
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
 
 ROOT_URLCONF = 'bibly_backend.urls'
 
@@ -91,12 +96,8 @@ WSGI_APPLICATION = 'bibly_backend.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'bibly_db',
-        'USER': 'admin',    # Replace with your username
-        'PASSWORD': 'admin', # Replace with your password
-        'HOST': 'localhost',
-        'PORT': '5432',
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 

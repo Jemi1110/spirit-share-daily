@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<XMLBIBLE>
+  <BIBLEBOOK bname="genesis">
+    <CHAPTER cnumber="1">
+      <VERS vnumber="1">En el principio creó Dios los cielos y la tierra.</VERS>
+      <VERS vnumber="2">Y la tierra estaba desordenada y vacía, y las tinieblas estaban sobre la faz del abismo.</VERS>
+      <VERS vnumber="3">Y dijo Dios: Sea la luz; y fue la luz.</VERS>
+    </CHAPTER>
+    <CHAPTER cnumber="2">
+      <VERS vnumber="1">Fueron, pues, acabados los cielos y la tierra, y todo el ejército de ellos.</VERS>
+      <VERS vnumber="2">Y acabó Dios en el día séptimo la obra que hizo.</VERS>
+    </CHAPTER>
+  </BIBLEBOOK>
+  <BIBLEBOOK bname="exodus">
+    <CHAPTER cnumber="1">
+      <VERS vnumber="1">Estos son los nombres de los hijos de Israel que entraron en Egipto.</VERS>
+      <VERS vnumber="2">Rubén, Simeón, Leví y Judá.</VERS>
+    </CHAPTER>
+  </BIBLEBOOK>
+  <BIBLEBOOK bname="matthew">
+    <CHAPTER cnumber="1">
+      <VERS vnumber="1">Libro de la genealogía de Jesucristo, hijo de David, hijo de Abraham.</VERS>
+      <VERS vnumber="2">Abraham engendró a Isaac, Isaac a Jacob, y Jacob a Judá y a sus hermanos.</VERS>
+    </CHAPTER>
+  </BIBLEBOOK>
+</XMLBIBLE>
