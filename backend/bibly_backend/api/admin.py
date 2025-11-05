@@ -2,7 +2,8 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from .models import (
     User, BibleVersion, Verse, Highlight, Devotional, 
-    StudyMaterial, Document, PrayerRequest, Post, Comment, Blog
+    StudyMaterial, Document, PrayerRequest, Post, Comment, Blog,
+    BookHighlight, BookHighlightComment, ReadingProgress
 )
 
 # Custom User Admin
@@ -157,6 +158,99 @@ class DocumentAdmin(admin.ModelAdmin):
     
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('owner').prefetch_related('collaborators')
+
+# Book Highlight Admin
+@admin.register(BookHighlight)
+class BookHighlightAdmin(admin.ModelAdmin):
+    list_display = ('id', 'user_name', 'document_title', 'chapter_number', 'highlighted_text_preview', 'color', 'created_at')
+    list_filter = ('color', 'document_id', 'chapter_number', 'created_at')
+    search_fields = ('user_name', 'document_title', 'highlighted_text', 'chapter_title')
+    readonly_fields = ('created_at', 'updated_at')
+    ordering = ('-created_at',)
+    
+    fieldsets = (
+        ('User Info', {
+            'fields': ('user', 'user_name')
+        }),
+        ('Document Info', {
+            'fields': ('document_id', 'document_title', 'chapter_number', 'chapter_title')
+        }),
+        ('Highlight Content', {
+            'fields': ('highlighted_text', 'color', 'start_offset', 'end_offset')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def highlighted_text_preview(self, obj):
+        return obj.highlighted_text[:50] + "..." if len(obj.highlighted_text) > 50 else obj.highlighted_text
+    highlighted_text_preview.short_description = 'Text Preview'
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('user')
+
+# Book Highlight Comment Admin
+@admin.register(BookHighlightComment)
+class BookHighlightCommentAdmin(admin.ModelAdmin):
+    list_display = ('id', 'user_name', 'highlight_preview', 'text_preview', 'created_at')
+    list_filter = ('created_at',)
+    search_fields = ('user_name', 'text', 'highlight__highlighted_text')
+    readonly_fields = ('created_at',)
+    ordering = ('-created_at',)
+    
+    def highlight_preview(self, obj):
+        return obj.highlight.highlighted_text[:30] + "..."
+    highlight_preview.short_description = 'Highlight'
+    
+    def text_preview(self, obj):
+        return obj.text[:50] + "..." if len(obj.text) > 50 else obj.text
+    text_preview.short_description = 'Comment'
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('user', 'highlight')
+
+# Reading Progress Admin
+@admin.register(ReadingProgress)
+class ReadingProgressAdmin(admin.ModelAdmin):
+    list_display = [
+        'get_identifier', 'document_id', 'current_chapter', 
+        'progress_percentage', 'reading_time_minutes', 'last_read_at'
+    ]
+    list_filter = [
+        'current_chapter', 'total_chapters', 'last_read_at', 'created_at'
+    ]
+    search_fields = [
+        'user__username', 'document_id', 'session_key'
+    ]
+    readonly_fields = ['created_at', 'updated_at', 'progress_percentage', 'last_read_at']
+    ordering = ['-last_read_at']
+    
+    fieldsets = (
+        ('User/Session Info', {
+            'fields': ('user', 'session_key')
+        }),
+        ('Document Info', {
+            'fields': ('document_id',)
+        }),
+        ('Progress Data', {
+            'fields': ('current_chapter', 'total_chapters', 'scroll_position', 'reading_time_minutes', 'progress_percentage')
+        }),
+        ('Timestamps', {
+            'fields': ('last_read_at', 'created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def get_identifier(self, obj):
+        if obj.user:
+            return f"👤 {obj.user.username}"
+        return f"🔗 Session: {obj.session_key[:8]}..."
+    get_identifier.short_description = 'User/Session'
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('user')
 
 # Customize Admin Site
 admin.site.site_header = "📚 Bibly Administration"

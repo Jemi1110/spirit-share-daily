@@ -42,14 +42,10 @@ export const HighlightRenderer: React.FC<HighlightRendererProps> = ({
     span.dataset.chapterNumber = highlight.chapterNumber.toString();
     span.title = `Highlight by ${highlight.userName}`;
     
-    console.log(`🎨 Created highlight span with classes: ${span.className}`);
-    
-    // Add inline styles as fallback to ensure visibility
-    span.style.backgroundColor = 'rgba(255, 235, 59, 0.6)';
-    span.style.borderBottom = '2px solid #f57f17';
-    span.style.padding = '2px 4px';
-    span.style.borderRadius = '3px';
+    // Let CSS handle the styling, but add some fallback inline styles for visibility
     span.style.cursor = 'pointer';
+    span.style.position = 'relative';
+    span.style.zIndex = '1';
     
     // Add click handler
     span.addEventListener('click', (event) => {
@@ -94,39 +90,24 @@ export const HighlightRenderer: React.FC<HighlightRendererProps> = ({
     return null;
   }, []);
 
-  const recreateRangeFromHighlight = useCallback((highlight: Highlight): Range | null => {
+  const recreateRangeFromHighlight = useCallback((highlight: Highlight, chapterElement: Element): Range | null => {
     try {
-      // Find the chapter container
-      const chapterElement = document.querySelector(`[data-chapter="${highlight.chapterNumber}"]`);
-      if (!chapterElement) {
-        console.warn(`Chapter ${highlight.chapterNumber} not found for highlight ${highlight.id}`);
-        return null;
-      }
-
-      console.log(`🔍 Found chapter element for highlight ${highlight.id}`);
-
       // Simple approach: try to find the text directly in the chapter
       const chapterText = chapterElement.textContent || '';
       const textIndex = chapterText.indexOf(highlight.text);
       
       if (textIndex === -1) {
-        console.warn(`Text "${highlight.text}" not found in chapter ${highlight.chapterNumber}`);
         return null;
       }
-
-      console.log(`🎯 Found text at index ${textIndex} in chapter`);
 
       // Find the text node and offset using the simple approach
       return findTextInChapter(chapterElement, highlight.text);
     } catch (error) {
-      console.error(`Error recreating range for highlight ${highlight.id}:`, error);
       return null;
     }
   }, []);
 
   const findTextInChapter = useCallback((chapterElement: Element, text: string): Range | null => {
-    console.log(`🔍 Searching for text: "${text.substring(0, 30)}..." in chapter`);
-    
     // Use TreeWalker to find text nodes
     const walker = document.createTreeWalker(
       chapterElement,
@@ -172,11 +153,9 @@ export const HighlightRenderer: React.FC<HighlightRendererProps> = ({
     }
 
     if (!startNode || !endNode) {
-      console.warn(`Could not find text nodes for: "${text.substring(0, 30)}..."`);
       return null;
     }
 
-    console.log(`✅ Found text nodes for highlight`);
     const range = document.createRange();
     range.setStart(startNode, startOffset);
     range.setEnd(endNode, endOffset);
@@ -185,30 +164,19 @@ export const HighlightRenderer: React.FC<HighlightRendererProps> = ({
   }, []);
 
   const renderHighlight = useCallback((highlight: Highlight) => {
-    console.log(`🔍 Attempting to render highlight:`, {
-      id: highlight.id,
-      text: highlight.text.substring(0, 30),
-      chapter: highlight.chapterNumber,
-      currentChapter,
-      alreadyRendered: renderedHighlightsRef.current.has(highlight.id)
-    });
-
     // Skip if already rendered
     if (renderedHighlightsRef.current.has(highlight.id)) {
-      console.log(`⏭️ Skipping already rendered highlight: ${highlight.id}`);
       return;
     }
 
-    // Only render highlights for the current chapter
-    if (highlight.chapterNumber !== currentChapter) {
-      console.log(`⏭️ Skipping highlight for different chapter: ${highlight.chapterNumber} vs ${currentChapter}`);
+    // Find the chapter element for this highlight
+    const chapterElement = document.querySelector(`[data-chapter="${highlight.chapterNumber}"]`);
+    if (!chapterElement) {
       return;
     }
 
-    console.log(`🎯 Recreating range for highlight: ${highlight.id}`);
-    const range = recreateRangeFromHighlight(highlight);
+    const range = recreateRangeFromHighlight(highlight, chapterElement);
     if (!range) {
-      console.warn(`❌ Could not recreate range for highlight: ${highlight.id}`);
       return;
     }
 
@@ -226,24 +194,17 @@ export const HighlightRenderer: React.FC<HighlightRendererProps> = ({
       }
 
       renderedHighlightsRef.current.add(highlight.id);
-      console.log(`✨ Rendered highlight: "${highlight.text.substring(0, 30)}..." by ${highlight.userName}`);
     } catch (error) {
-      console.error(`Error rendering highlight ${highlight.id}:`, error);
-      
       // Fallback: try to find and highlight the text manually
       try {
-        const chapterElement = document.querySelector(`[data-chapter="${highlight.chapterNumber}"]`);
-        if (chapterElement) {
-          const fallbackRange = findTextInChapter(chapterElement, highlight.text);
-          if (fallbackRange) {
-            const span = createHighlightSpan(highlight);
-            fallbackRange.surroundContents(span);
-            renderedHighlightsRef.current.add(highlight.id);
-            console.log(`✨ Rendered highlight (fallback): "${highlight.text.substring(0, 30)}..."`);
-          }
+        const fallbackRange = findTextInChapter(chapterElement, highlight.text);
+        if (fallbackRange) {
+          const span = createHighlightSpan(highlight);
+          fallbackRange.surroundContents(span);
+          renderedHighlightsRef.current.add(highlight.id);
         }
       } catch (fallbackError) {
-        console.error(`Fallback rendering also failed for highlight ${highlight.id}:`, fallbackError);
+        // Silent fail
       }
     }
   }, [currentChapter, createHighlightSpan, recreateRangeFromHighlight, findTextInChapter]);

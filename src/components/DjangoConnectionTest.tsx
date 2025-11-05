@@ -18,7 +18,7 @@ export const DjangoConnectionTest: React.FC = () => {
     // Test 1: Basic connection
     try {
       addResult('📡 Testing basic connection to Django...');
-      const response = await fetch('http://127.0.0.1:8000/api/highlight/', {
+      const response = await fetch('http://127.0.0.1:8000/api/highlights/', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -39,7 +39,7 @@ export const DjangoConnectionTest: React.FC = () => {
     // Test 2: CORS check
     try {
       addResult('🔒 Testing CORS configuration...');
-      const corsResponse = await fetch('http://127.0.0.1:8000/api/highlight/', {
+      const corsResponse = await fetch('http://127.0.0.1:8000/api/highlights/', {
         method: 'OPTIONS',
       });
       

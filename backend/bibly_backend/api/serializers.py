@@ -2,7 +2,8 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import (
     BibleVersion, Verse, Highlight, Devotional, StudyMaterial, Document,
-    PrayerRequest, Post, Comment, Blog
+    PrayerRequest, Post, Comment, Blog, BookHighlight, BookHighlightComment,
+    ReadingProgress
 )
 
 User = get_user_model()
@@ -125,3 +126,66 @@ class DocumentSerializer(serializers.ModelSerializer):
             'tags', 'parsed_content', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'file_type', 'file_size', 'is_bible', 'parsed_content', 'created_at', 'updated_at']
+
+class BookHighlightCommentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BookHighlightComment
+        fields = ['id', 'user_name', 'text', 'created_at']
+
+class BookHighlightSerializer(serializers.ModelSerializer):
+    comments = BookHighlightCommentSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = BookHighlight
+        fields = [
+            'id', 'user_name', 'document_id', 'document_title',
+            'chapter_number', 'chapter_title', 'highlighted_text', 
+            'color', 'start_offset', 'end_offset',
+            'created_at', 'updated_at', 'comments'
+        ]
+    
+    def create(self, validated_data):
+        # Auto-assign user if authenticated
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            validated_data['user'] = request.user
+            if not validated_data.get('user_name'):
+                validated_data['user_name'] = request.user.get_full_name() or request.user.username
+        return super().create(validated_data)
+
+class ReadingProgressSerializer(serializers.ModelSerializer):
+    progress_percentage = serializers.ReadOnlyField()
+    
+    # Map frontend camelCase to backend snake_case
+    documentId = serializers.CharField(source='document_id', write_only=True, required=False)
+    userId = serializers.CharField(write_only=True, required=False)
+    currentChapter = serializers.IntegerField(source='current_chapter', write_only=True, required=False)
+    scrollPosition = serializers.IntegerField(source='scroll_position', write_only=True, required=False)
+    totalChapters = serializers.IntegerField(source='total_chapters', write_only=True, required=False)
+    readingTimeMinutes = serializers.IntegerField(source='reading_time_minutes', write_only=True, required=False)
+    lastReadAt = serializers.DateTimeField(source='last_read_at', write_only=True, required=False)
+    
+    class Meta:
+        model = ReadingProgress
+        fields = [
+            'id', 'document_id', 'current_chapter', 'scroll_position', 
+            'total_chapters', 'reading_time_minutes', 'progress_percentage',
+            'last_read_at', 'created_at', 'updated_at',
+            # Frontend camelCase fields
+            'documentId', 'userId', 'currentChapter', 'scrollPosition',
+            'totalChapters', 'readingTimeMinutes', 'lastReadAt'
+        ]
+    
+    def create(self, validated_data):
+        # Handle both authenticated and anonymous users
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            validated_data['user'] = request.user
+        else:
+            # Use session key for anonymous users
+            if request and hasattr(request, 'session'):
+                if not request.session.session_key:
+                    request.session.create()
+                validated_data['session_key'] = request.session.session_key
+        
+        return super().create(validated_data)

@@ -5,7 +5,8 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .views import (
     UserViewSet, BibleVersionViewSet, VerseViewSet, HighlightViewSet,
     DevotionalViewSet, StudyMaterialViewSet, DocumentViewSet, PrayerRequestViewSet,
-    PostViewSet, CommentViewSet, BlogViewSet, CustomTokenObtainPairView
+    PostViewSet, CommentViewSet, BlogViewSet, CustomTokenObtainPairView,
+    BookHighlightViewSet, ReadingProgressViewSet, get_csrf_token
 )
 
 router = DefaultRouter()
@@ -20,9 +21,12 @@ router.register(r'prayers', PrayerRequestViewSet)
 router.register(r'posts', PostViewSet)
 router.register(r'comments', CommentViewSet)
 router.register(r'blogs', BlogViewSet)
+router.register(r'book-highlights', BookHighlightViewSet)
+router.register(r'reading-progress', ReadingProgressViewSet, basename='reading-progress')
 
 urlpatterns = [
     path('auth/login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('csrf/', get_csrf_token, name='csrf-token'),
     path('', include(router.urls)),
 ]

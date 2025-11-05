@@ -29,7 +29,8 @@ import {
   EyeOff,
   List,
   Menu,
-  X
+  X,
+  Sparkles
 } from "lucide-react";
 import { toast } from "sonner";
 import { documentAPI } from "@/services/api";
@@ -44,6 +45,9 @@ import { useCollaborativeHighlights } from "@/hooks/useCollaborativeHighlights";
 import { highlightService } from "@/services/highlightService";
 import { simpleDjangoHighlightService } from "@/services/simpleDjangoHighlightService";
 import { DjangoConnectionTest } from "@/components/DjangoConnectionTest";
+import { SimpleDjangoTest } from "@/components/SimpleDjangoTest";
+import { readingProgressService } from "@/services/readingProgressService";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 // Add CSS for smooth animations
 const gloseStyles = `
@@ -97,33 +101,33 @@ const gloseStyles = `
   }
   
   .glose-highlight-yellow {
-    background-color: #fff3cd;
-    border-bottom: 2px solid #ffeaa7;
+    background-color: #fff3cd !important;
+    border-bottom: 2px solid #ffeaa7 !important;
   }
   
   .glose-highlight-green {
-    background-color: #d4edda;
-    border-bottom: 2px solid #a3d977;
+    background-color: #d4edda !important;
+    border-bottom: 2px solid #a3d977 !important;
   }
   
   .glose-highlight-blue {
-    background-color: #cce5ff;
-    border-bottom: 2px solid #74b9ff;
+    background-color: #cce5ff !important;
+    border-bottom: 2px solid #74b9ff !important;
   }
   
   .glose-highlight-pink {
-    background-color: #f8d7da;
-    border-bottom: 2px solid #fd79a8;
+    background-color: #f8d7da !important;
+    border-bottom: 2px solid #fd79a8 !important;
   }
   
   .glose-highlight-purple {
-    background-color: #e2d9f3;
-    border-bottom: 2px solid #a29bfe;
+    background-color: #e2d9f3 !important;
+    border-bottom: 2px solid #a29bfe !important;
   }
   
   .glose-highlight-orange {
-    background-color: #ffeaa7;
-    border-bottom: 2px solid #fdcb6e;
+    background-color: #ffeaa7 !important;
+    border-bottom: 2px solid #fdcb6e !important;
   }
 `;
 
@@ -276,6 +280,10 @@ const CollaborativeReader = () => {
   const [totalChapters, setTotalChapters] = useState(0);
   const [useGloseReader, setUseGloseReader] = useState(true); // Enable Glose-style reading
 
+  // Reading progress tracking
+  const [isProgressLoaded, setIsProgressLoaded] = useState(false);
+  const autoSaveCleanupRef = useRef<(() => void) | null>(null);
+
 
   const [loading, setLoading] = useState(true);
 
@@ -366,13 +374,13 @@ const CollaborativeReader = () => {
             chapterNumber: highlight.chapterNumber
           });
         }
-        console.log(`💾 Saved ${updatedHighlights.length} highlights to Django backend`);
+        // Highlights saved successfully
       } catch (error) {
         console.error('Error saving highlights to Django backend:', error);
         // Fallback to localStorage
         const storageKey = `highlights_${documentId || 'default'}`;
         localStorage.setItem(storageKey, JSON.stringify(updatedHighlights));
-        console.log(`💾 Saved ${updatedHighlights.length} highlights to localStorage (fallback)`);
+        // Highlights saved to localStorage as fallback
       }
     }
   });
@@ -383,24 +391,33 @@ const CollaborativeReader = () => {
       try {
         // Load highlights from Django backend
         const djangoHighlights = await simpleDjangoHighlightService.loadHighlights();
-        
+
         if (djangoHighlights.length > 0) {
           console.log(`📚 Found ${djangoHighlights.length} saved highlights in Django backend`);
-          
+
           // Only load if we don't already have highlights (avoid duplicates)
           if (highlights.length === 0) {
             console.log(`📚 Loading ${djangoHighlights.length} saved highlights from Django`);
-            
+
             // Convert Django format to frontend format
             djangoHighlights.forEach((djangoHighlight: any) => {
               const highlight = {
                 id: djangoHighlight.id,
                 userId: 'django-user',
                 userName: djangoHighlight.user_name,
-                text: djangoHighlight.verse.split(' (Chapter')[0], // Extract text before chapter info
+                text: djangoHighlight.highlighted_text, // Use correct field name
                 color: djangoHighlight.color,
-                chapterNumber: 1, // Default to chapter 1, you can enhance this
-                comments: []
+                chapterNumber: djangoHighlight.chapter_number || 1, // Use actual chapter number
+                textRange: {
+                  startOffset: djangoHighlight.start_offset || 0,
+                  endOffset: djangoHighlight.end_offset || djangoHighlight.highlighted_text.length,
+                  startContainer: `[data-chapter="${djangoHighlight.chapter_number || 1}"]`,
+                  endContainer: `[data-chapter="${djangoHighlight.chapter_number || 1}"]`
+                },
+                position: { x: 100, y: 100 },
+                comments: [],
+                createdAt: djangoHighlight.created_at || new Date().toISOString(),
+                updatedAt: djangoHighlight.created_at || new Date().toISOString()
               };
               createCollaborativeHighlight(highlight);
             });
@@ -435,6 +452,8 @@ const CollaborativeReader = () => {
       loadSavedHighlights();
     }
   }, [documentId, epubBook, highlights.length, createCollaborativeHighlight]);
+
+
 
   // Audio recording
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -642,7 +661,7 @@ const CollaborativeReader = () => {
   }, []);
 
   const handleSelectionCleared = useCallback(() => {
-    console.log('📝 Text selection cleared');
+    // Text selection cleared
 
     setTextSelection({
       isActive: false,
@@ -712,6 +731,12 @@ const CollaborativeReader = () => {
       endOffset,
       fullHighlight: newHighlight
     });
+
+    // Debug: Check if highlights array is updating
+    setTimeout(() => {
+      console.log('🔍 Current highlights count:', highlights.length);
+      console.log('🔍 Latest highlights:', highlights.slice(-3));
+    }, 100);
 
     // Clear selection
     window.getSelection()?.removeAllRanges();
@@ -811,6 +836,67 @@ const CollaborativeReader = () => {
       setShowTableOfContents(false);
     }
   }, []);
+
+  // Load and restore reading progress
+  useEffect(() => {
+    const loadReadingProgress = async () => {
+      if (!documentId || !epubBook || isProgressLoaded) return;
+
+      try {
+        const progress = await readingProgressService.loadProgress(documentId, 'current-user');
+
+        if (progress) {
+          console.log('📖 Restoring reading progress:', progress);
+
+          // Restore chapter position
+          if (progress.current_chapter !== currentChapter) {
+            console.log(`📖 Jumping to saved chapter: ${progress.current_chapter}`);
+            navigateToChapter(progress.current_chapter);
+          }
+
+          // Restore scroll position after a short delay
+          setTimeout(() => {
+            window.scrollTo(0, progress.scroll_position);
+            console.log(`📖 Restored scroll position: ${progress.scroll_position}`);
+          }, 500);
+
+          toast.success(`Continuando desde el capítulo ${progress.current_chapter}`);
+        } else {
+          console.log('📖 No previous reading progress found');
+        }
+
+        setIsProgressLoaded(true);
+      } catch (error) {
+        console.error('Error loading reading progress:', error);
+        setIsProgressLoaded(true);
+      }
+    };
+
+    loadReadingProgress();
+  }, [documentId, epubBook, currentChapter, navigateToChapter, isProgressLoaded]);
+
+  // Start auto-save reading progress
+  useEffect(() => {
+    if (!documentId || !epubBook || !isProgressLoaded) return;
+
+    // Start auto-save
+    const cleanup = readingProgressService.startAutoSave(
+      documentId,
+      'current-user',
+      () => currentChapter,
+      () => window.scrollY,
+      () => totalChapters
+    );
+
+    autoSaveCleanupRef.current = cleanup;
+
+    // Cleanup on unmount
+    return () => {
+      if (autoSaveCleanupRef.current) {
+        autoSaveCleanupRef.current();
+      }
+    };
+  }, [documentId, epubBook, currentChapter, totalChapters, isProgressLoaded]);
 
   // Highlight management
   const handleChangeHighlightColor = useCallback((highlightId: string, newColor: string) => {
@@ -1600,7 +1686,7 @@ const CollaborativeReader = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 relative overflow-hidden">
+    <div className="min-h-screen bg-background text-foreground">
       <style dangerouslySetInnerHTML={{ __html: gloseStyles }} />
 
       {/* Text Selection Handler */}
@@ -1627,6 +1713,390 @@ const CollaborativeReader = () => {
         onClose={handleSelectionCleared}
       />
 
+      {/* Desktop Layout - EXACTO como BibleAppPreview */}
+      <div className="hidden lg:flex">
+        {/* Sidebar */}
+        <div className="w-80 bg-card/50 backdrop-blur-lg border-r border-border p-6 space-y-6">
+          {/* Header */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-6 h-6 text-orange-400" />
+                <span className="text-lg font-medium text-muted-foreground">Leyendo ahora,</span>
+              </div>
+              <ThemeToggle />
+            </div>
+            <h1 className="text-2xl font-bold">{documentData?.name || 'Cargando...'}</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              {epubBook && epubBook.chapters[currentChapter - 1] 
+                ? epubBook.chapters[currentChapter - 1].title 
+                : `Capítulo ${currentChapter}`
+              }
+            </p>
+          </div>
+
+          {/* Navigation */}
+          <nav className="space-y-2">
+            <button 
+              onClick={() => setShowTableOfContents(!showTableOfContents)}
+              className={`w-full flex items-center gap-3 p-3 rounded-lg ${showTableOfContents 
+                ? 'bg-gray-500/10 text-gray-400' 
+                : 'text-muted-foreground hover:bg-muted/50'
+              }`}
+            >
+              <List className="w-5 h-5" />
+              <span className="font-medium">Índice</span>
+            </button>
+            <button 
+              onClick={() => setIsHighlightMode(!isHighlightMode)}
+              className={`w-full flex items-center gap-3 p-3 rounded-lg ${isHighlightMode 
+                ? 'bg-yellow-500/10 text-yellow-600' 
+                : 'text-muted-foreground hover:bg-muted/50'
+              }`}
+            >
+              <Highlighter className="w-5 h-5" />
+              <span>Resaltar</span>
+            </button>
+            <button 
+              onClick={() => setShowComments(!showComments)}
+              className={`w-full flex items-center gap-3 p-3 rounded-lg ${showComments 
+                ? 'bg-gray-500/10 text-gray-400' 
+                : 'text-muted-foreground hover:bg-muted/50'
+              }`}
+            >
+              <MessageSquare className="w-5 h-5" />
+              <span>Comentarios</span>
+            </button>
+            <button className="w-full flex items-center gap-3 p-3 rounded-lg text-muted-foreground hover:bg-muted/50">
+              <Users className="w-5 h-5" />
+              <span>Colaboradores</span>
+            </button>
+          </nav>
+        </div>
+
+        {/* Main Content */}
+        <div className="flex-1 p-8 max-w-4xl">
+          <div className="space-y-8">
+            {/* Reading Progress Card - Como BibleAppPreview */}
+            <div className="bible-card-sunset relative overflow-hidden">
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <p className="text-white/80 text-sm font-medium">Progreso de lectura</p>
+                    <p className="text-white text-xl font-semibold">Capítulo {currentChapter} de {totalChapters}</p>
+                  </div>
+                  <button 
+                    onClick={() => navigateChapter('next')}
+                    disabled={currentChapter >= totalChapters}
+                    className="bg-white/20 backdrop-blur-sm rounded-full px-6 py-3 text-white font-medium flex items-center gap-2 disabled:opacity-50"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                    Siguiente
+                  </button>
+                </div>
+
+                <div className="mb-8">
+                  <p className="text-white text-lg font-medium leading-relaxed">
+                    {epubBook && epubBook.chapters[currentChapter - 1] 
+                      ? epubBook.chapters[currentChapter - 1].title 
+                      : 'Continuando con la lectura...'
+                    }
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <button 
+                      onClick={() => navigateChapter('prev')}
+                      disabled={currentChapter <= 1}
+                      className="flex items-center gap-2 bg-white/20 backdrop-blur-sm rounded-full px-6 py-3 text-white disabled:opacity-50"
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                      <span>Anterior</span>
+                    </button>
+                    <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm rounded-full px-6 py-3 text-white">
+                      <Highlighter className="w-5 h-5" />
+                      <span>{highlights.length}</span>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setShowComments(!showComments)}
+                    className="bg-white/20 backdrop-blur-sm rounded-full p-4 text-white"
+                  >
+                    <MessageSquare className="w-6 h-6" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Background decoration */}
+              <div className="absolute inset-0 opacity-20">
+                <div className="absolute bottom-0 right-0 w-40 h-40 bg-white/10 rounded-full -mr-20 -mb-20"></div>
+                <div className="absolute top-1/2 right-12 w-3 h-3 bg-white/30 rounded-full"></div>
+                <div className="absolute top-1/3 right-24 w-2 h-2 bg-white/40 rounded-full"></div>
+              </div>
+            </div>
+
+            {/* Grid Layout for Desktop - Como BibleAppPreview */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Reading Content */}
+              <div className="bible-glass-card lg:col-span-2 min-h-[60vh] relative overflow-hidden">
+                <div className="bible-reading-content">
+                  {epubBook && useGloseReader ? (
+                    <GloseScrollReader
+                      ref={gloseReaderRef}
+                      epubBook={epubBook}
+                      onChapterChange={handleChapterChange}
+                      currentChapter={currentChapter}
+                    />
+                  ) : (
+                    <div className="text-center py-12">
+                      <div className="w-8 h-8 border-2 border-gray-500 border-t-transparent rounded-full mx-auto mb-4 animate-spin"></div>
+                      <p className="text-foreground">
+                        {epubBook ? 'Preparando lector...' : 'Cargando contenido...'}
+                      </p>
+                      {epubBook && (
+                        <p className="text-sm text-muted-foreground mt-2">
+                          Libro: {epubBook.title} ({epubBook.chapters.length} capítulos)
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Highlights Card */}
+              <div className="bible-card-purple relative">
+                <div className="mb-6">
+                  <h3 className="text-white text-lg font-semibold mb-4">Mis Highlights</h3>
+                  <div className="flex items-center gap-1 mb-6">
+                    {[...Array(8)].map((_, i) => (
+                      <div key={i} className="w-1 h-1 bg-white/40 rounded-full"></div>
+                    ))}
+                    <div className="w-2 h-2 bg-white rounded-full mx-2"></div>
+                    {[...Array(8)].map((_, i) => (
+                      <div key={i} className="w-1 h-1 bg-white/40 rounded-full"></div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="text-center mb-6">
+                  <h4 className="text-white text-xl font-bold mb-1">{highlights.length}</h4>
+                  <h4 className="text-white text-xl font-bold">NOTAS GUARDADAS</h4>
+                </div>
+
+                <div className="flex justify-center">
+                  <div className="w-12 h-12 bg-gray-500 rounded-full flex items-center justify-center">
+                    <Sparkles className="w-6 h-6 text-white" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile Layout - EXACTO como BibleAppPreview */}
+      <div className="lg:hidden p-4 space-y-6 pb-20">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <BookOpen className="w-6 h-6 text-orange-400" />
+              <span className="text-lg font-medium text-muted-foreground">Leyendo ahora,</span>
+            </div>
+            <h1 className="bible-heading">{documentData?.name || 'Cargando...'}</h1>
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            <ThemeToggle />
+            <p className="text-sm text-muted-foreground">Cap {currentChapter}/{totalChapters}</p>
+          </div>
+        </div>
+
+        {/* Progress Card - Mobile */}
+        <div className="bible-card-sunset relative overflow-hidden">
+          <div className="relative z-10">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-white/80 text-sm font-medium">Progreso de lectura</p>
+                <p className="text-white text-lg font-semibold">Capítulo {currentChapter} de {totalChapters}</p>
+              </div>
+              <button 
+                onClick={() => navigateChapter('next')}
+                disabled={currentChapter >= totalChapters}
+                className="bg-white/20 backdrop-blur-sm rounded-full px-4 py-2 text-white text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+              >
+                <ChevronRight className="w-4 h-4" />
+                Siguiente
+              </button>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-white text-xl font-medium leading-relaxed">
+                {epubBook && epubBook.chapters[currentChapter - 1] 
+                  ? epubBook.chapters[currentChapter - 1].title 
+                  : 'Continuando con la lectura...'
+                }
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <button 
+                  onClick={() => navigateChapter('prev')}
+                  disabled={currentChapter <= 1}
+                  className="flex items-center gap-2 bg-white/20 backdrop-blur-sm rounded-full px-4 py-2 text-white disabled:opacity-50"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  <span className="text-sm">Anterior</span>
+                </button>
+                <button className="flex items-center gap-2 bg-white/20 backdrop-blur-sm rounded-full px-4 py-2 text-white">
+                  <Highlighter className="w-4 h-4" />
+                  <span className="text-sm">{highlights.length}</span>
+                </button>
+              </div>
+              <button 
+                onClick={() => setShowComments(!showComments)}
+                className="bg-white/20 backdrop-blur-sm rounded-full p-3 text-white"
+              >
+                <MessageSquare className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Background decoration */}
+          <div className="absolute inset-0 opacity-20">
+            <div className="absolute bottom-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mb-16"></div>
+            <div className="absolute top-1/2 right-8 w-2 h-2 bg-white/30 rounded-full"></div>
+            <div className="absolute top-1/3 right-16 w-1 h-1 bg-white/40 rounded-full"></div>
+          </div>
+        </div>
+
+        {/* Reading Content */}
+        <div className="bible-glass-card min-h-[60vh] relative overflow-hidden">
+          <div className="bible-reading-content">
+            {epubBook && useGloseReader ? (
+              <GloseScrollReader
+                ref={gloseReaderRef}
+                epubBook={epubBook}
+                onChapterChange={handleChapterChange}
+                currentChapter={currentChapter}
+              />
+            ) : (
+              <div className="text-center py-12">
+                <div className="w-8 h-8 border-2 border-gray-500 border-t-transparent rounded-full mx-auto mb-4 animate-spin"></div>
+                <p className="text-foreground">
+                  {epubBook ? 'Preparando lector...' : 'Cargando contenido...'}
+                </p>
+                {epubBook && (
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Libro: {epubBook.title} ({epubBook.chapters.length} capítulos)
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Highlights Card - Mobile */}
+        <div className="bible-card-purple">
+          <div className="mb-4">
+            <h3 className="text-white text-lg font-semibold mb-2">Mis Highlights</h3>
+            <div className="flex items-center gap-1 mb-4">
+              {[...Array(8)].map((_, i) => (
+                <div key={i} className="w-1 h-1 bg-white/40 rounded-full"></div>
+              ))}
+              <div className="w-2 h-2 bg-white rounded-full mx-2"></div>
+              {[...Array(8)].map((_, i) => (
+                <div key={i} className="w-1 h-1 bg-white/40 rounded-full"></div>
+              ))}
+            </div>
+          </div>
+
+          <div className="text-center">
+            <h4 className="text-white text-2xl font-bold mb-2">{highlights.length}</h4>
+            <h4 className="text-white text-2xl font-bold">NOTAS GUARDADAS</h4>
+          </div>
+
+          <div className="absolute bottom-4 left-4">
+            <div className="w-8 h-8 bg-gray-500 rounded-full flex items-center justify-center">
+              <Sparkles className="w-4 h-4 text-white ml-0.5" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom Navigation - Only on Mobile */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-card/80 backdrop-blur-lg border-t border-border">
+        <div className="flex items-center justify-around py-3 px-4 max-w-md mx-auto">
+          <button 
+            onClick={() => setShowTableOfContents(!showTableOfContents)}
+            className="flex flex-col items-center gap-1 p-2"
+          >
+            <div className={`w-6 h-6 ${showTableOfContents ? 'bg-gray-500' : ''} rounded-full flex items-center justify-center`}>
+              <List className={`w-4 h-4 ${showTableOfContents ? 'text-white' : 'text-muted-foreground'}`} />
+            </div>
+            <span className={`text-xs ${showTableOfContents ? 'text-gray-500 font-medium' : 'text-muted-foreground'}`}>Índice</span>
+          </button>
+
+          <button 
+            onClick={() => setIsHighlightMode(!isHighlightMode)}
+            className="flex flex-col items-center gap-1 p-2"
+          >
+            <div className={`w-6 h-6 ${isHighlightMode ? 'bg-yellow-500' : ''} rounded-full flex items-center justify-center`}>
+              <Highlighter className={`w-4 h-4 ${isHighlightMode ? 'text-white' : 'text-muted-foreground'}`} />
+            </div>
+            <span className={`text-xs ${isHighlightMode ? 'text-yellow-600 font-medium' : 'text-muted-foreground'}`}>Resaltar</span>
+          </button>
+
+          <button 
+            onClick={() => setShowComments(!showComments)}
+            className="flex flex-col items-center gap-1 p-2"
+          >
+            <div className={`w-6 h-6 ${showComments ? 'bg-gray-500' : ''} rounded-full flex items-center justify-center`}>
+              <MessageSquare className={`w-4 h-4 ${showComments ? 'text-white' : 'text-muted-foreground'}`} />
+            </div>
+            <span className={`text-xs ${showComments ? 'text-gray-500 font-medium' : 'text-muted-foreground'}`}>Comentarios</span>
+          </button>
+
+          <button className="flex flex-col items-center gap-1 p-2">
+            <div className="w-6 h-6 flex items-center justify-center">
+              <Users className="w-4 h-4 text-muted-foreground" />
+            </div>
+            <span className="text-xs text-muted-foreground">Colaborar</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Comment Popup */}
+      <CommentPopup
+        isVisible={showCommentPopup}
+        position={highlightPopupPosition}
+        highlight={selectedHighlight}
+        onAddComment={(comment) => {
+          // Handle comment addition
+        }}
+        currentUserId="current-user"
+        onClose={() => {
+          setShowCommentPopup(false);
+          setSelectedHighlight(null);
+        }}
+      />
+
+      {/* Enhanced Comments Panel */}
+      <EnhancedCommentsPanel
+        isVisible={showComments}
+        highlights={highlights}
+        currentChapter={currentChapter}
+        totalChapters={totalChapters}
+        onClose={() => setShowComments(false)}
+        onNavigateToHighlight={handleNavigateToHighlight}
+        onHighlightClick={(highlight) => {
+          setSelectedHighlight(highlight as any);
+          setShowCommentPopup(true);
+          setShowComments(false);
+        }}
+      />
+
       {/* Comment Popup */}
       <CommentPopup
         isVisible={showCommentPopup}
@@ -1644,59 +2114,63 @@ const CollaborativeReader = () => {
         }}
       />
       {/* Mobile Header */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
+      <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-md border-b border-border shadow-sm">
         <div className="flex items-center justify-between px-4 py-3">
           <button
             onClick={() => navigate('/bible')}
-            className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+            className="p-2 rounded-full hover:bg-muted transition-colors"
           >
-            <ChevronLeft className="h-5 w-5 text-gray-700" />
+            <ChevronLeft className="h-5 w-5 text-foreground" />
           </button>
 
           <div className="flex-1 text-center mx-4">
-            <h1 className="font-semibold text-gray-900 text-sm truncate">{documentData?.name || 'Cargando...'}</h1>
+            <h1 className="font-semibold text-foreground text-sm truncate">{documentData?.name || 'Cargando...'}</h1>
             {epubBook && epubBook.chapters[currentChapter - 1] && (
-              <p className="text-xs text-gray-500 truncate">{epubBook.chapters[currentChapter - 1].title}</p>
+              <p className="text-xs text-muted-foreground truncate">{epubBook.chapters[currentChapter - 1].title}</p>
             )}
             {/* Collaborative status */}
             <div className="flex items-center justify-center gap-1 mt-1">
               <div className={`w-2 h-2 rounded-full ${isCollaborativeConnected ? 'bg-green-500' : 'bg-gray-400'}`}></div>
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-muted-foreground">
                 {isCollaborativeConnected ? 'Colaborativo' : 'Desconectado'}
               </span>
             </div>
           </div>
 
-          <button
-            onClick={() => setShowComments(!showComments)}
-            className="p-2 rounded-full hover:bg-gray-100 transition-colors"
-          >
-            <MessageSquare className="h-5 w-5 text-gray-700" />
-          </button>
+          <div className="flex items-center gap-2">
+            <ThemeToggle className="w-10 h-10" />
+            <button
+              onClick={() => setShowComments(!showComments)}
+              className="p-2 rounded-full hover:bg-muted transition-colors"
+            >
+              <MessageSquare className="h-5 w-5 text-foreground" />
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Desktop Header */}
-      <div className="hidden md:block fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
+      <div className="hidden md:block fixed top-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-md border-b border-border shadow-sm">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <button
                 onClick={() => navigate('/bible')}
-                className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+                className="p-2 rounded-full hover:bg-muted transition-colors"
               >
-                <ChevronLeft className="h-5 w-5 text-gray-700" />
+                <ChevronLeft className="h-5 w-5 text-foreground" />
               </button>
               <div>
-                <h1 className="text-xl font-bold text-gray-900">{documentData?.name || 'Cargando...'}</h1>
+                <h1 className="text-xl font-bold text-foreground">{documentData?.name || 'Cargando...'}</h1>
                 {epubBook && epubBook.chapters[currentChapter - 1] && (
-                  <p className="text-sm text-gray-600">{epubBook.chapters[currentChapter - 1].title}</p>
+                  <p className="text-sm text-muted-foreground">{epubBook.chapters[currentChapter - 1].title}</p>
                 )}
               </div>
             </div>
 
             <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 text-sm text-gray-500">
+              <ThemeToggle />
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                 <span>{participants.length} lectores conectados</span>
               </div>
@@ -1722,13 +2196,12 @@ const CollaborativeReader = () => {
       <div className="pt-16 md:pt-20 pb-20 md:pb-8 min-h-screen">
         <div className="max-w-4xl mx-auto px-4 md:px-8 relative">
 
-          {/* Reading Content */}
-          <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 min-h-[70vh] relative overflow-hidden mb-8">
-            <div className="p-6 md:p-12">
+          {/* Reading Content - Bible App Style */}
+          <div className="bible-glass-card min-h-[70vh] relative overflow-hidden mb-8">
+            <div className="bible-reading-content">
 
               {epubBook && useGloseReader ? (
                 <>
-                  {/* Debug: Rendering GloseScrollReader with {epubBook.chapters.length} chapters */}
                   <GloseScrollReader
                     ref={gloseReaderRef}
                     epubBook={epubBook}
@@ -1738,13 +2211,12 @@ const CollaborativeReader = () => {
                 </>
               ) : (
                 <div className="text-center py-12">
-                  {/* Debug: Not rendering GloseScrollReader - epubBook: {!!epubBook}, useGloseReader: {useGloseReader} */}
-                  <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-                  <p className="text-gray-600">
+                  <div className="w-8 h-8 border-2 border-gray-500 border-t-transparent rounded-full mx-auto mb-4 animate-spin"></div>
+                  <p className="text-foreground">
                     {epubBook ? 'Preparando lector...' : 'Cargando contenido...'}
                   </p>
                   {epubBook && (
-                    <p className="text-sm text-gray-500 mt-2">
+                    <p className="text-sm text-muted-foreground mt-2">
                       Libro: {epubBook.title} ({epubBook.chapters.length} capítulos)
                     </p>
                   )}
@@ -1753,66 +2225,79 @@ const CollaborativeReader = () => {
             </div>
           </div>
 
-          {/* Navigation Controls - Centered */}
+          {/* Navigation Controls - Modern Bible App Style */}
           <div className="flex justify-center mb-8">
-            <div className="bg-white/90 backdrop-blur-md rounded-full shadow-lg border border-white/20 px-6 py-3 flex items-center gap-4">
+            <div className="bible-glass-card px-6 py-4 flex items-center gap-6">
               <button
                 onClick={() => navigateChapter('prev')}
                 disabled={currentChapter <= 1}
-                className="p-2 rounded-full hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                className="w-10 h-10 rounded-full bg-gray-500/10 hover:bg-gray-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center"
               >
-                <ChevronLeft className="h-5 w-5 text-gray-700" />
+                <ChevronLeft className="h-5 w-5 text-foreground" />
               </button>
 
               <div className="text-center px-4">
-                <div className="font-semibold text-gray-900 text-sm">
+                <div className="font-semibold text-foreground text-sm">
                   Capítulo {currentChapter} de {totalChapters}
                 </div>
                 {epubBook && epubBook.chapters[currentChapter - 1] && (
-                  <div className="text-xs text-gray-500 mt-0.5 truncate max-w-48">
+                  <div className="text-xs text-muted-foreground mt-0.5 truncate max-w-48">
                     {epubBook.chapters[currentChapter - 1].title}
                   </div>
                 )}
+                {/* Reading Progress Indicator - Apple Style */}
+                <div className="w-full bg-muted rounded-full h-1.5 mt-3">
+                  <div
+                    className="bg-gray-500 h-1.5 rounded-full transition-all duration-300"
+                    style={{ width: `${(currentChapter / totalChapters) * 100}%` }}
+                  ></div>
+                </div>
+                <div className="text-xs text-muted-foreground mt-2">
+                  {Math.round((currentChapter / totalChapters) * 100)}% completado
+                </div>
               </div>
 
               <button
                 onClick={() => navigateChapter('next')}
                 disabled={currentChapter >= totalChapters}
-                className="p-2 rounded-full hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                className="w-10 h-10 rounded-full bg-gray-500/10 hover:bg-gray-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center"
               >
-                <ChevronRight className="h-5 w-5 text-gray-700" />
+                <ChevronRight className="h-5 w-5 text-foreground" />
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Floating Action Buttons - Desktop */}
+      {/* Floating Action Buttons - Apple Style */}
       <div className="hidden md:flex fixed right-6 top-1/2 transform -translate-y-1/2 z-40 flex-col gap-3">
         {documentData?.file_type === 'epub' && (
           <button
             onClick={() => setShowTableOfContents(!showTableOfContents)}
-            className={`p-3 rounded-full shadow-lg backdrop-blur-md border transition-all ${showTableOfContents
-              ? 'bg-blue-500 text-white border-blue-400'
-              : 'bg-white/90 text-gray-700 border-white/20 hover:bg-white'
+            className={`w-12 h-12 rounded-full shadow-lg backdrop-blur-md border transition-all ${showTableOfContents
+              ? 'bg-gray-500 text-white border-gray-400'
+              : 'bg-card/90 text-foreground border-border hover:bg-card'
               }`}
             title="Índice"
           >
-            <List className="h-5 w-5" />
+            <List className="h-5 w-5 mx-auto" />
           </button>
         )}
 
         {/* Highlight Mode Toggle */}
         <button
           onClick={() => setIsHighlightMode(!isHighlightMode)}
-          className={`p-3 rounded-full shadow-lg backdrop-blur-md border transition-all ${isHighlightMode
+          className={`w-12 h-12 rounded-full shadow-lg backdrop-blur-md border transition-all ${isHighlightMode
             ? 'bg-yellow-500 text-white border-yellow-400'
-            : 'bg-white/90 text-gray-700 border-white/20 hover:bg-white'
+            : 'bg-card/90 text-foreground border-border hover:bg-card'
             }`}
           title={isHighlightMode ? 'Desactivar highlights' : 'Activar highlights'}
         >
-          <Highlighter className="h-5 w-5" />
+          <Highlighter className="h-5 w-5 mx-auto" />
         </button>
+
+        {/* Simple Django Test */}
+        <SimpleDjangoTest />
 
         {/* Django Connection Test */}
         <div className="mb-4">

@@ -19,12 +19,13 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
-from api.views import home  # Import the home view
+from api.views import home, get_csrf_token  # Import the home view and csrf token
 
 urlpatterns = [
     path('', home, name='home'),  # Add this for the root path
     path('admin/', admin.site.urls),
     path('api/', include('api.urls')),
+    path('panel/api/', include('api.urls')),  # Panel API route (avoids admin middleware)
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
 ]

@@ -18,6 +18,7 @@ import BlogDetail from "./pages/BlogDetail";
 import Profile from "./pages/Profile";
 import CollaborativeReader from "./pages/CollaborativeReader";
 import NotFound from "./pages/NotFound";
+import { BibleAppPreview } from "./components/BibleAppPreview";
 
 const queryClient = new QueryClient();
 
@@ -79,6 +80,8 @@ const App = () => (
               <Route path="/collaborative-reader/:documentId/:sessionId" element={<CollaborativeReader />} />
               {/* Catch malformed collaborative reader URLs */}
               <Route path="/collaborative-reader/*" element={<CollaborativeReader />} />
+              {/* Bible App Preview */}
+              <Route path="/preview" element={<BibleAppPreview />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>

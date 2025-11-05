@@ -27,7 +27,7 @@ class HighlightService {
 
   constructor() {
     // Use environment variable or default to your Django backend
-    this.baseUrl = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000/api';
+    this.baseUrl = (typeof process !== 'undefined' && process.env?.REACT_APP_API_URL) || 'http://127.0.0.1:8000/admin/api';
   }
 
   // Save highlight to your existing Django backend
@@ -176,7 +176,7 @@ class HighlightService {
 
   // Real-time collaboration via WebSocket (Django Channels)
   subscribeToHighlightUpdates(documentId: string, callback: (highlight: HighlightData, action: 'created' | 'updated' | 'deleted') => void): () => void {
-    const wsUrl = process.env.REACT_APP_WS_URL || 'ws://localhost:8000';
+    const wsUrl = (typeof process !== 'undefined' && process.env?.REACT_APP_WS_URL) || 'ws://127.0.0.1:8000';
     const ws = new WebSocket(`${wsUrl}/ws/highlights/${documentId}/`);
 
     ws.onopen = () => {

@@ -13,7 +13,8 @@ class SimpleDjangoHighlightService {
   private baseUrl: string;
 
   constructor() {
-    this.baseUrl = 'http://127.0.0.1:8000/api';
+    // Use environment variable or default to panel API
+    this.baseUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8002/panel/api';
   }
 
   // Save highlight to your Django backend
@@ -25,55 +26,52 @@ class SimpleDjangoHighlightService {
     chapterNumber: number;
   }): Promise<void> {
     try {
-      console.log('💾 Saving highlight to Django:', highlight.id);
-      
       const payload = {
         id: highlight.id,
         user_name: highlight.userName,
-        verse: `${highlight.text} (Chapter ${highlight.chapterNumber})`,
+        document_id: 'epub-book',
+        document_title: 'EPUB Book',
+        chapter_number: highlight.chapterNumber,
+        chapter_title: `Chapter ${highlight.chapterNumber}`,
+        highlighted_text: highlight.text,
         color: highlight.color,
+        start_offset: 0,
+        end_offset: highlight.text.length,
       };
 
-      const response = await fetch(`${this.baseUrl}/highlight/`, {
+      const response = await fetch(`${this.baseUrl}/book-highlights/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-CSRFToken': this.getCSRFToken(),
         },
+        credentials: 'include', // Important for session cookies
         body: JSON.stringify(payload),
       });
 
-      if (response.ok) {
-        console.log('✅ Highlight saved to Django backend');
-      } else {
-        console.error('❌ Failed to save highlight:', response.statusText);
-      }
+      // Silent operation - no console logs
     } catch (error) {
-      console.error('❌ Error saving highlight to Django:', error);
+      // Silent fail - the app works with localStorage as fallback
     }
   }
 
   // Load highlights from your Django backend
   async loadHighlights(): Promise<SimpleHighlight[]> {
     try {
-      console.log('📚 Loading highlights from Django backend');
-      
-      const response = await fetch(`${this.baseUrl}/highlight/`, {
+      const response = await fetch(`${this.baseUrl}/book-highlights/`, {
         headers: {
           'X-CSRFToken': this.getCSRFToken(),
         },
+        credentials: 'include', // Important for session cookies
       });
 
       if (response.ok) {
         const highlights = await response.json();
-        console.log(`✅ Loaded ${highlights.length} highlights from Django`);
         return highlights;
       } else {
-        console.error('❌ Failed to load highlights:', response.statusText);
         return [];
       }
     } catch (error) {
-      console.error('❌ Error loading highlights from Django:', error);
       return [];
     }
   }

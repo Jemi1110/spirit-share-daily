@@ -25,13 +25,24 @@ const Index = () => {
           <p className="text-2xl text-muted-foreground mb-8">
             Connect with God and Community Through Scripture
           </p>
-          <Button
-            size="lg"
-            className="bg-spiritual hover:bg-spiritual/90 text-lg px-8 py-6"
-            onClick={() => navigate("/auth")}
-          >
-            Get Started
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Button
+              size="lg"
+              className="bg-spiritual hover:bg-spiritual/90 text-lg px-8 py-6"
+              onClick={() => navigate("/auth")}
+            >
+              Get Started
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              className="text-lg px-8 py-6 border-primary text-primary hover:bg-primary hover:text-white flex items-center gap-2"
+              onClick={() => navigate("/preview")}
+            >
+              <PenTool className="w-5 h-5" />
+              New Design Preview
+            </Button>
+          </div>
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto mt-16">

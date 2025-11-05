@@ -40,13 +40,15 @@ def home(request):
 
 from .models import (
     BibleVersion, Verse, Highlight, Devotional, StudyMaterial, Document,
-    PrayerRequest, Post, Comment, Blog
+    PrayerRequest, Post, Comment, Blog, BookHighlight, BookHighlightComment,
+    ReadingProgress
 )
 from .serializers import (
     UserSerializer, UserRegistrationSerializer, BibleVersionSerializer,
     VerseSerializer, HighlightSerializer, DevotionalSerializer,
     StudyMaterialSerializer, DocumentSerializer, PrayerRequestSerializer, 
-    PostSerializer, CommentSerializer, BlogSerializer
+    PostSerializer, CommentSerializer, BlogSerializer, BookHighlightSerializer,
+    BookHighlightCommentSerializer, ReadingProgressSerializer
 )
 
 User = get_user_model()
@@ -350,3 +352,145 @@ class DocumentViewSet(viewsets.ModelViewSet):
             'status': 'public' if document.is_public else 'private',
             'is_public': document.is_public
         })
+
+class BookHighlightViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing book highlights (separate from Bible highlights)"""
+    queryset = BookHighlight.objects.all()
+    serializer_class = BookHighlightSerializer
+    permission_classes = [AllowAny]  # Allow anonymous access like reading progress
+    
+    def get_queryset(self):
+        document_id = self.request.query_params.get('document_id')
+        chapter_number = self.request.query_params.get('chapter_number')
+        user_id = self.request.query_params.get('user_id')
+        
+        queryset = BookHighlight.objects.select_related('user').prefetch_related('comments')
+        
+        if document_id:
+            queryset = queryset.filter(document_id=document_id)
+        
+        if chapter_number:
+            queryset = queryset.filter(chapter_number=chapter_number)
+            
+        if user_id:
+            queryset = queryset.filter(user_id=user_id)
+        
+        return queryset.order_by('chapter_number', 'start_offset')
+    
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        # Handle user assignment
+        if request.user.is_authenticated:
+            highlight = serializer.save(user=request.user)
+        else:
+            # For anonymous users, create a default user or handle differently
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            default_user, created = User.objects.get_or_create(
+                username='anonymous',
+                defaults={
+                    'email': 'anonymous@example.com',
+                    'first_name': 'Anonymous', 
+                    'last_name': 'User'
+                }
+            )
+            highlight = serializer.save(user=default_user)
+        
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['post'])
+    def add_comment(self, request, pk=None):
+        """Add a comment to a book highlight"""
+        highlight = self.get_object()
+        
+        comment_data = {
+            'id': f"comment_{request.data.get('id', 'auto')}",
+            'highlight': highlight.id,
+            'user_name': request.data.get('user_name', 'Anonymous'),
+            'text': request.data.get('text', '')
+        }
+        
+        serializer = BookHighlightCommentSerializer(data=comment_data)
+        serializer.is_valid(raise_exception=True)
+        
+        if request.user.is_authenticated:
+            comment = serializer.save(user=request.user)
+        else:
+            # Use the same default user as the highlight
+            comment = serializer.save(user=highlight.user)
+        
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+class ReadingProgressViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing reading progress - supports both authenticated and anonymous users"""
+    serializer_class = ReadingProgressSerializer
+    permission_classes = [AllowAny]  # Allow both authenticated and anonymous users
+    
+    def get_queryset(self):
+        document_id = self.request.query_params.get('document_id')
+        
+        # Handle both authenticated and anonymous users
+        if self.request.user.is_authenticated:
+            queryset = ReadingProgress.objects.filter(user=self.request.user)
+        else:
+            # Use session key for anonymous users
+            session_key = self.request.session.session_key
+            if not session_key:
+                self.request.session.create()
+                session_key = self.request.session.session_key
+            queryset = ReadingProgress.objects.filter(session_key=session_key)
+        
+        if document_id:
+            queryset = queryset.filter(document_id=document_id)
+        
+        return queryset.order_by('-last_read_at')
+    
+    def create(self, request, *args, **kwargs):
+        # Update existing progress or create new one
+        document_id = request.data.get('document_id')
+        
+        if request.user.is_authenticated:
+            # Authenticated user
+            progress, created = ReadingProgress.objects.update_or_create(
+                user=request.user,
+                document_id=document_id,
+                defaults={
+                    'current_chapter': request.data.get('current_chapter', 1),
+                    'scroll_position': request.data.get('scroll_position', 0),
+                    'total_chapters': request.data.get('total_chapters', 1),
+                    'reading_time_minutes': request.data.get('reading_time_minutes', 0),
+                }
+            )
+        else:
+            # Anonymous user - use session
+            if not request.session.session_key:
+                request.session.create()
+            
+            progress, created = ReadingProgress.objects.update_or_create(
+                session_key=request.session.session_key,
+                document_id=document_id,
+                defaults={
+                    'current_chapter': request.data.get('current_chapter', 1),
+                    'scroll_position': request.data.get('scroll_position', 0),
+                    'total_chapters': request.data.get('total_chapters', 1),
+                    'reading_time_minutes': request.data.get('reading_time_minutes', 0),
+                }
+            )
+        
+        serializer = self.get_serializer(progress)
+        status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+        
+        return Response(serializer.data, status=status_code)
+
+# CSRF Token endpoint
+from rest_framework.decorators import api_view, permission_classes
+from django.http import JsonResponse
+from django.middleware.csrf import get_token
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_csrf_token(request):
+    """Provide CSRF token for frontend"""
+    return JsonResponse({'csrfToken': get_token(request)})
