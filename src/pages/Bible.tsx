@@ -100,26 +100,15 @@ const Bible = () => {
   const loadUserDocuments = async () => {
     try {
       const documents = await documentAPI.getAll() as any[];
-      console.log('Loaded documents:', documents.length);
       
       // Debug: Log document structure
       documents.forEach((doc: any, index: number) => {
-        console.log(`Document ${index + 1}:`, {
-          id: doc.id,
-          name: doc.name,
-          is_bible: doc.is_bible,
-          has_parsed_content: !!doc.parsed_content,
-          has_content: !!doc.content,
-          content_type: typeof doc.content,
-          content_preview: doc.content ? doc.content.substring(0, 100) + '...' : 'No content'
-        });
       });
       
       setUserDocuments(documents);
       
       // Add Bible documents to Bible versions
       const bibleDocuments = documents.filter((doc: any) => doc.is_bible);
-      console.log('Bible documents found:', bibleDocuments.length);
       
       const bibleVersions = bibleDocuments.map((doc: any) => ({
         id: `user-${doc.id}`,
@@ -134,8 +123,6 @@ const Bible = () => {
       setBibleVersions(prev => {
         // Remove any existing user Bibles to avoid duplicates
         const externalVersions = prev.filter(version => !version.id.startsWith('user-'));
-        console.log('Adding user Bible versions:', bibleVersions.length);
-        console.log('Existing external versions:', externalVersions.length);
         // Add user Bibles at the beginning
         return [...bibleVersions, ...externalVersions];
       });
@@ -151,7 +138,6 @@ const Bible = () => {
     if (selectedVersion && availableBooks?.length > 0 && !selectedBook) {
       // Only auto-select if it's a user Bible (external Bibles are handled in loadBooks)
       if (selectedVersion.startsWith('user-')) {
-        console.log('Auto-selecting first book (user Bible fallback):', availableBooks[0].name);
         setSelectedBook(availableBooks[0].id);
       }
     }
@@ -162,7 +148,6 @@ const Bible = () => {
     if (selectedBook && availableBooks?.length > 0 && !selectedChapter) {
       const book = availableBooks.find(b => b.id === selectedBook);
       if (book && book.chapters?.length > 0) {
-        console.log('Auto-selecting first chapter (fallback):', book.chapters[0].reference);
         setSelectedChapter(book.chapters[0].id);
       }
     }
@@ -175,7 +160,6 @@ const Bible = () => {
       // Only load if this seems to be a manual chapter change (not from book selection)
       const isManualChapterChange = currentChapter && currentChapter.id !== selectedChapter;
       if (isManualChapterChange) {
-        console.log('Loading external Bible chapter due to manual selection:', { selectedVersion, selectedBook, selectedChapter });
         loadChapter();
       }
     }
@@ -218,8 +202,6 @@ const Bible = () => {
       setBibleVersions(prev => {
         // Keep existing user Bibles (those with id starting with 'user-')
         const userBibles = prev.filter(version => version.id.startsWith('user-'));
-        console.log('Preserving user Bibles:', userBibles.length);
-        console.log('Adding external versions:', organizedVersions.length);
         // Combine user Bibles with external versions
         return [...userBibles, ...organizedVersions];
       });
@@ -238,7 +220,6 @@ const Bible = () => {
 
   const loadBooks = async (bibleId: string) => {
     try {
-      console.log('Loading books for Bible ID:', bibleId);
       
       // Clear current selections when loading new Bible
       setSelectedBook("");
@@ -250,7 +231,6 @@ const Bible = () => {
         const result = await loadUserBibleBooks(bibleId);
         if (result.success && result.books) {
           setAvailableBooks(result.books);
-          console.log('Loaded user Bible books:', result.books.map(b => ({ id: b.id, name: b.name })));
           
           const bookNames = result.books.slice(0, 3).map(book => book.name).join(', ');
           const moreBooks = result.books.length > 3 ? ` y ${result.books.length - 3} más` : '';
@@ -262,14 +242,12 @@ const Bible = () => {
           // Auto-select the first book and go directly to chapter 1
           if (result.books.length > 0) {
             const firstBook = result.books[0];
-            console.log('Auto-selecting first book for user Bible:', firstBook.name);
             setSelectedBook(firstBook.id);
             
             // Go directly to first chapter
             if (firstBook.chapters && firstBook.chapters.length > 0) {
               const firstChapter = firstBook.chapters[0];
               setSelectedChapter(firstChapter.id);
-              console.log('Auto-going to first chapter:', firstChapter.reference);
               
               // Load the chapter content immediately for user Bibles
               await loadChapterForUserBible(bibleId, firstBook.id, firstChapter.id);
@@ -282,15 +260,12 @@ const Bible = () => {
       }
       
       // Load from external API for standard Bibles
-      console.log('Loading books from external API for:', bibleId);
       const books = await externalBibleAPI.getBooks(bibleId);
       setAvailableBooks(books);
-      console.log('Loaded external Bible books:', books.slice(0, 5).map((b: any) => ({ id: b.id, name: b.name })));
       
       // Auto-select the first book and go directly to chapter 1
       if (books && books.length > 0) {
         const firstBook = books[0];
-        console.log('Auto-selecting first book for external Bible:', firstBook.name);
         setSelectedBook(firstBook.id);
         
         // Load chapters and go directly to chapter 1
@@ -312,11 +287,9 @@ const Bible = () => {
   // Helper function to handle book change for external Bibles during auto-selection
   const handleBookChangeForExternalBible = async (bookId: string, bibleId: string) => {
     try {
-      console.log('Auto-loading chapters for external Bible book:', bookId);
       
       // Load chapters for the selected book
       const chapters = await externalBibleAPI.getChapters(bibleId, bookId);
-      console.log('Loaded chapters for auto-selection:', chapters ? (chapters as any[]).length : 0);
 
       // Update the book in availableBooks with chapters
       setAvailableBooks(prevBooks =>
@@ -331,7 +304,6 @@ const Bible = () => {
       if (chapters && Array.isArray(chapters) && chapters.length > 0) {
         const firstChapter = chapters[0];
         setSelectedChapter(firstChapter.id);
-        console.log('Auto-going to first chapter:', firstChapter.reference || firstChapter.id);
         
         // Load the chapter content immediately
         await loadChapterForExternalBible(bibleId, firstChapter.id);
@@ -366,10 +338,8 @@ const Bible = () => {
       if (document.parsed_content && document.parsed_content.books && Array.isArray(document.parsed_content.books)) {
         // Use existing parsed content
         parsedBooks = document.parsed_content.books;
-        console.log('Using existing parsed content:', parsedBooks.length, 'books found');
       } else {
         // Try to re-parse the content using our XML parser
-        console.log('No valid parsed content found, attempting to re-parse...');
         
         // Try different content field names that the backend might use
         let contentToParse = document.content || document.file_content || document.raw_content;
@@ -377,12 +347,10 @@ const Bible = () => {
         // Check if parsed_content has raw XML content
         if (!contentToParse && document.parsed_content && document.parsed_content.raw_xml) {
           contentToParse = document.parsed_content.raw_xml;
-          console.log('Found raw XML in parsed_content, length:', contentToParse.length);
         }
         
         // If no content available, try to fetch the file directly
         if (!contentToParse && document.file) {
-          console.log('No parsed content available, attempting to fetch file directly...');
           try {
             // Try to fetch the file with proper headers
             const response = await fetch(document.file, {
@@ -394,7 +362,6 @@ const Bible = () => {
             
             if (response.ok) {
               contentToParse = await response.text();
-              console.log('Successfully fetched file content, length:', contentToParse.length);
             } else {
               console.error('Failed to fetch file:', response.status, response.statusText);
               
@@ -403,7 +370,6 @@ const Bible = () => {
                 const docResponse = await documentAPI.getById(document.id) as any;
                 if (docResponse.content) {
                   contentToParse = docResponse.content;
-                  console.log('Retrieved content via document API');
                 }
               } catch (apiError) {
                 console.error('Document API fetch also failed:', apiError);
@@ -418,12 +384,10 @@ const Bible = () => {
           try {
             // Check if it's XML content
             if (contentToParse.trim().startsWith('<')) {
-              console.log('Detected XML content, parsing with XMLBibleParser...');
               const parseResult = xmlParser.parseXMLBible(contentToParse);
               
               if (parseResult.success && parseResult.data && parseResult.data.books) {
                 parsedBooks = parseResult.data.books;
-                console.log('Successfully re-parsed XML:', parsedBooks.length, 'books found');
                 
                 // Update the document with parsed content for future use
                 document.parsed_content = parseResult.data;
@@ -441,7 +405,6 @@ const Bible = () => {
                 const jsonResult = parseJsonBible(jsonData);
                 if (jsonResult && jsonResult.books) {
                   parsedBooks = jsonResult.books;
-                  console.log('Successfully parsed JSON:', parsedBooks.length, 'books found');
                 }
               } catch (jsonError) {
                 console.error('JSON parsing failed:', jsonError);
@@ -504,9 +467,6 @@ const Bible = () => {
         };
       }
 
-      console.log('Successfully processed', books.length, 'books for', document.name);
-      console.log('Books found:', books.map(book => book.name).join(', '));
-
       return {
         success: true,
         books: books,
@@ -524,8 +484,6 @@ const Bible = () => {
 
   const loadChapter = async () => {
     if (!selectedVersion || !selectedChapter) return;
-
-    console.log('Loading chapter:', { selectedVersion, selectedBook, selectedChapter });
 
     setLoadingChapter(true);
     try {
@@ -570,7 +528,6 @@ const Bible = () => {
       }
       
       // Load from external API for standard Bibles
-      console.log('Loading chapter from external API:', { selectedVersion, selectedChapter });
       
       // Validate that we have proper IDs for external API
       if (!selectedBook || !selectedChapter) {
@@ -587,7 +544,6 @@ const Bible = () => {
       if (!selectedVersion.startsWith('user-')) {
         toast.error('Failed to load chapter');
       } else {
-        console.log('Skipping error toast for user-uploaded Bible chapter loading');
       }
     } finally {
       setLoadingChapter(false);
@@ -629,7 +585,6 @@ const Bible = () => {
           };
           
           setCurrentChapter(realChapter);
-          console.log('Loaded chapter directly:', chapter.reference);
         }
       }
     } catch (error) {
@@ -643,11 +598,9 @@ const Bible = () => {
   const loadChapterForExternalBible = async (versionId: string, chapterId: string) => {
     try {
       setLoadingChapter(true);
-      console.log('Loading external Bible chapter directly:', { versionId, chapterId });
       
       const chapter = await externalBibleAPI.getChapter(versionId, chapterId);
       setCurrentChapter(chapter);
-      console.log('Loaded external chapter directly:', chapter.reference);
     } catch (error) {
       console.error('Error loading external Bible chapter:', error);
       toast.error('Failed to load chapter');
@@ -657,20 +610,16 @@ const Bible = () => {
   };
 
   const handleVersionChange = async (versionId: string) => {
-    console.log('Changing Bible version to:', versionId);
-    console.log('Clearing previous state...');
     
     setSelectedVersion(versionId);
     setSelectedBook("");
     setSelectedChapter("");
     setCurrentChapter(null);
     
-    console.log('Loading books for new version...');
     await loadBooks(versionId);
   };
 
   const handleBookChange = async (bookId: string) => {
-    console.log('Book changed to:', bookId);
     setSelectedBook(bookId);
     setSelectedChapter("");
     setCurrentChapter(null);
@@ -679,18 +628,15 @@ const Bible = () => {
     try {
       // Check if it's a user-uploaded Bible
       if (selectedVersion.startsWith('user-')) {
-        console.log('Loading chapters for user-uploaded Bible...');
         
         // Find the book in availableBooks (already loaded with chapters)
         const selectedBookData = availableBooks.find(book => book.id === bookId);
         
         if (selectedBookData && selectedBookData.chapters && selectedBookData.chapters.length > 0) {
-          console.log('Using existing chapters from parsed content:', selectedBookData.chapters.length);
           
           // Set the first chapter as selected and load it immediately
           const firstChapter = selectedBookData.chapters[0];
           setSelectedChapter(firstChapter.id);
-          console.log('Going directly to first chapter:', firstChapter.reference);
           
           // Load the chapter content immediately for user Bibles
           await loadChapterForUserBible(selectedVersion, bookId, firstChapter.id);
@@ -700,9 +646,7 @@ const Bible = () => {
         }
       } else {
         // Use external API for standard Bibles
-        console.log('Loading chapters from external API...');
         const chapters = await externalBibleAPI.getChapters(selectedVersion, bookId);
-        console.log('Loaded chapters:', chapters);
 
         // Update the book in availableBooks with chapters
         setAvailableBooks(prevBooks =>
@@ -717,7 +661,6 @@ const Bible = () => {
         if (chapters && Array.isArray(chapters) && chapters.length > 0) {
           const firstChapter = chapters[0];
           setSelectedChapter(firstChapter.id);
-          console.log('Going directly to first chapter:', firstChapter.reference || firstChapter.id);
           
           // Load the chapter content immediately for external Bibles
           await loadChapterForExternalBible(selectedVersion, firstChapter.id);
@@ -730,7 +673,6 @@ const Bible = () => {
       if (!selectedVersion.startsWith('user-')) {
         toast.error('Failed to load chapters');
       } else {
-        console.log('Skipping error toast for user-uploaded Bible');
       }
     }
   };
@@ -814,7 +756,6 @@ const Bible = () => {
       if (result.success && result.data) {
         // Log success information
         if (result.metadata) {
-          console.log(`Successfully parsed XML Bible: ${result.metadata.format} format, ${result.metadata.booksFound} books, ${result.metadata.chaptersFound} chapters, ${result.metadata.versesFound} verses`);
         }
         
         // Show warnings if any
@@ -1975,7 +1916,6 @@ const Bible = () => {
           </CardContent>
         </Card>
       </div>
-
 
     </Layout>
   );

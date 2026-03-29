@@ -480,7 +480,6 @@ export class XMLBibleParser {
    */
   private log(...args: any[]): void {
     if (this.debugMode) {
-      console.log('[XMLBibleParser]', ...args);
     }
   }
 }

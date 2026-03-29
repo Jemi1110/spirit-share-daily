@@ -72,10 +72,8 @@ export const TextSelectionHandler: React.FC<TextSelectionHandlerProps> = ({
   }, []);
 
   const handleSelectionChange = useCallback(() => {
-    console.log('🎯 SELECTION: handleSelectionChange called, isEnabled:', isEnabled);
     
     if (!isEnabled) {
-      console.log('🎯 SELECTION: Selection handling disabled');
       return;
     }
 
@@ -121,14 +119,6 @@ export const TextSelectionHandler: React.FC<TextSelectionHandlerProps> = ({
       }
 
       const chapterNumber = getCurrentChapterFromRange(range);
-
-      console.log('🎯 SELECTION: Text selected:', {
-        text: selectedText.substring(0, 50) + (selectedText.length > 50 ? '...' : ''),
-        chapter: chapterNumber,
-        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
-        isEnabled,
-        rangeValid: isValidSelection(range)
-      });
 
       onTextSelected({
         selectedText,

@@ -35,7 +35,6 @@ export class SimpleEpubReader {
     onProgress?: (progress: EpubLoadingProgress) => void
   ): Promise<SimpleEpubBook> {
     this.progressCallback = onProgress;
-    console.log('SimpleEpubReader: Starting progressive EPUB loading:', file.name);
     
     try {
       // Phase 1: Initialize
@@ -43,20 +42,17 @@ export class SimpleEpubReader {
       
       // Load EPUB as ZIP
       const zip = await JSZip.loadAsync(file);
-      console.log('SimpleEpubReader: ZIP loaded successfully');
       
       // Phase 2: Parse metadata quickly
       this.reportProgress('metadata', 15, 'Extrayendo información del libro...', 0, 0);
       
       const opfPath = await this.findOpfFile(zip);
       const metadata = await this.parseMetadata(zip, opfPath);
-      console.log('SimpleEpubReader: Metadata:', metadata);
       
       // Phase 3: Get chapter structure (fast)
       this.reportProgress('structure', 25, 'Analizando estructura de capítulos...', 0, 0);
       
       const chapterStructure = await this.getChapterStructure(zip, opfPath);
-      console.log(`SimpleEpubReader: Found ${chapterStructure.length} chapters`);
       
       // Phase 4: Load first chapter immediately (Glose-style)
       this.reportProgress('first-chapter', 40, 'Cargando primer capítulo...', 0, chapterStructure.length);
@@ -69,7 +65,6 @@ export class SimpleEpubReader {
         
         // If CONTENTS-based loading fails, fall back to spine-based loading
         const fallbackStructure = await this.getSpineBasedStructure(zip, opfPath);
-        console.log(`SimpleEpubReader: Fallback to spine-based structure with ${fallbackStructure.length} items`);
         
         if (fallbackStructure.length === 0) {
           throw new Error('No chapters found in EPUB');
@@ -116,7 +111,6 @@ export class SimpleEpubReader {
   }
 
   private async getChapterStructure(zip: JSZip, opfPath: string): Promise<any[]> {
-    console.log('SimpleEpubReader: Using CONTENTS-based chapter extraction');
     
     try {
       // Use contentsParser to get real chapters from CONTENTS section
@@ -124,13 +118,6 @@ export class SimpleEpubReader {
         new File([await zip.generateAsync({ type: 'blob' })], 'temp.epub')
       );
       
-      console.log(`SimpleEpubReader: CONTENTS parser result:`, {
-        totalRealChapters: contentsResult.totalRealChapters,
-        chaptersFound: contentsResult.chapters.length,
-        contentsFound: contentsResult.contentsFound,
-        parseMethod: contentsResult.parseMethod,
-        chapterTitles: contentsResult.chapters.map(ch => ch.title)
-      });
       
       if (contentsResult.chapters.length > 0) {
         // Convert CONTENTS chapters to our structure
@@ -142,8 +129,6 @@ export class SimpleEpubReader {
           title: chapter.title
         }));
         
-        console.log('SimpleEpubReader: Using CONTENTS chapters:', chapterStructure.map(ch => `"${ch.title}"`));
-        console.log('SimpleEpubReader: Chapter structure details:', chapterStructure.slice(0, 3));
         return chapterStructure;
       }
     } catch (error) {
@@ -151,7 +136,6 @@ export class SimpleEpubReader {
     }
     
     // Fallback to spine if CONTENTS parsing fails
-    console.log('SimpleEpubReader: Falling back to spine-based extraction');
     const opfFile = zip.file(opfPath);
     if (!opfFile) throw new Error('OPF file not found');
 
@@ -189,7 +173,6 @@ export class SimpleEpubReader {
   }
 
   private async getSpineBasedStructure(zip: JSZip, opfPath: string): Promise<any[]> {
-    console.log('SimpleEpubReader: Using spine-based structure as fallback with filtering');
     
     const opfFile = zip.file(opfPath);
     if (!opfFile) throw new Error('OPF file not found');
@@ -224,7 +207,6 @@ export class SimpleEpubReader {
       ].some(keyword => filename.includes(keyword));
       
       if (isAuxiliaryFile) {
-        console.log(`SimpleEpubReader: Skipping auxiliary file in spine: ${href}`);
         continue;
       }
 
@@ -237,7 +219,6 @@ export class SimpleEpubReader {
       });
     }
     
-    console.log(`SimpleEpubReader: Spine fallback found ${chapterStructure.length} real chapters after filtering`);
     return chapterStructure;
   }
 
@@ -248,7 +229,6 @@ export class SimpleEpubReader {
     const cleanHref = chapterInfo.href.split('#')[0];
     const chapterPath = basePath + cleanHref;
     
-    console.log(`SimpleEpubReader: Extracting chapter from path: ${chapterPath} (original href: ${chapterInfo.href})`);
     
     const chapterFile = zip.file(chapterPath);
     if (!chapterFile) {
@@ -260,33 +240,26 @@ export class SimpleEpubReader {
     const chapterDoc = parser.parseFromString(chapterHtml, 'text/html');
     
     // Extract title and content - prioritize HTML titles over generic CONTENTS titles
-    console.log(`🔍 Chapter ${chapterInfo.order}: CONTENTS title = "${chapterInfo.title}"`);
     
     const htmlTitle = this.extractChapterTitle(chapterDoc, chapterInfo.order);
-    console.log(`🔍 Chapter ${chapterInfo.order}: HTML title = "${htmlTitle}"`);
     
     // Use HTML title if it's more descriptive than CONTENTS title
     let title = chapterInfo.title;
     if (!title || title.startsWith('Chapter ') || title.match(/^Chapter\s+\d+$/)) {
       // CONTENTS title is generic, prefer HTML title
       title = htmlTitle;
-      console.log(`🔄 Chapter ${chapterInfo.order}: Using HTML title over generic CONTENTS title`);
     } else if (htmlTitle && !htmlTitle.startsWith('Chapter ') && htmlTitle !== title) {
       // Both have real titles, prefer HTML as it's usually more accurate
       title = htmlTitle;
-      console.log(`🔄 Chapter ${chapterInfo.order}: Using HTML title over CONTENTS title`);
     }
     
-    console.log(`✅ Chapter ${chapterInfo.order}: Final title = "${title}"`);
     const content = this.extractChapterContent(chapterDoc);
     
     // Count words from text content, not HTML
     const textForWordCount = chapterDoc.body?.textContent || '';
     const wordCount = textForWordCount.split(/\s+/).filter(word => word.length > 0).length;
     
-    console.log(`SimpleEpubReader: Chapter content preview:`, content.substring(0, 200) + '...');
     
-    console.log(`SimpleEpubReader: Loaded chapter ${chapterInfo.order}: "${title}" (${wordCount} words)`);
     
     return {
       id: chapterInfo.idref,
@@ -305,16 +278,13 @@ export class SimpleEpubReader {
   ): Promise<void> {
     // Load chapters in background without blocking UI
     setTimeout(async () => {
-      console.log('SimpleEpubReader: Starting background chapter loading...');
       
       for (let i = 1; i < chapterStructure.length; i++) {
         try {
-          console.log(`🔄 SimpleEpubReader: Loading chapter ${i + 1} of ${chapterStructure.length}`);
           const chapter = await this.extractSingleChapter(zip, opfPath, chapterStructure[i], i);
           
           // Add chapter to book
           book.chapters.push(chapter);
-          console.log(`✅ SimpleEpubReader: Chapter ${i + 1} loaded: "${chapter.title}"`);
           
           // Report progress
           const progress = 50 + ((i / (chapterStructure.length - 1)) * 50);
@@ -337,7 +307,6 @@ export class SimpleEpubReader {
       
       // Complete
       this.reportProgress('complete', 100, 'EPUB cargado completamente', book.chapters.length, chapterStructure.length);
-      console.log('SimpleEpubReader: Background loading complete');
     }, 100); // Small delay to let initial UI render
   }
 
@@ -389,7 +358,6 @@ export class SimpleEpubReader {
     const spineItems = Array.from(doc.querySelectorAll('spine itemref'));
     const chapters: SimpleChapter[] = [];
     
-    console.log(`SimpleEpubReader: Processing ${spineItems.length} spine items`);
     
     for (let i = 0; i < spineItems.length; i++) {
       const itemref = spineItems[i];
@@ -420,14 +388,12 @@ export class SimpleEpubReader {
         const extractedTitle = this.extractChapterTitle(chapterDoc, i + 1);
         const title = extractedTitle !== `Chapter ${i + 1}` ? extractedTitle : `Chapter ${chapters.length + 1}`;
         
-        console.log(`SimpleEpubReader: Extracted title for chapter ${chapters.length + 1}: "${title}" (from HTML: "${extractedTitle}")`);
         
         // Extract clean text content
         const content = this.extractChapterContent(chapterDoc);
         
         // Skip if no meaningful content
         if (content.length < 50) {
-          console.log(`SimpleEpubReader: Skipping chapter ${i + 1} - too short`);
           continue;
         }
         
@@ -441,7 +407,6 @@ export class SimpleEpubReader {
           wordCount
         });
         
-        console.log(`SimpleEpubReader: Chapter ${chapters.length}: "${title}" (${wordCount} words)`);
         
       } catch (error) {
         console.error(`SimpleEpubReader: Error processing chapter ${i + 1}:`, error);
@@ -452,17 +417,14 @@ export class SimpleEpubReader {
   }
 
   private extractChapterTitle(doc: Document, fallbackNumber: number): string {
-    console.log(`🔍 extractChapterTitle: Starting extraction for chapter ${fallbackNumber}`);
     
     // Try different methods to find chapter title
     
     // Method 1: Look for headings with better filtering (including links inside headings)
     const headings = doc.querySelectorAll('h1, h2, h3, h4, h5, h6');
-    console.log(`🔍 extractChapterTitle: Found ${headings.length} headings`);
     
     for (const heading of headings) {
       let text = heading.textContent?.trim();
-      console.log(`🔍 extractChapterTitle: Heading text: "${text}"`);
       
       if (text && text.length > 0 && text.length < 200) {
         const originalText = text;
@@ -472,11 +434,9 @@ export class SimpleEpubReader {
         text = text.replace(/^(Chapter\s+\d+:?\s*)/i, '').trim();
         text = text.replace(/^(\d+\.\s*)/i, '').trim();
         
-        console.log(`🔍 extractChapterTitle: After cleanup: "${originalText}" -> "${text}"`);
         
         // If we have meaningful text after cleanup, use it
         if (text.length > 0 && !text.match(/^(chapter|cap\\.?)\\s*\\d*$/i)) {
-          console.log(`✅ extractChapterTitle: Using heading title: "${text}"`);
           return text;
         }
       }
@@ -484,11 +444,9 @@ export class SimpleEpubReader {
     
     // Method 1.5: Look specifically for h1 with links (like in this EPUB)
     const h1Links = doc.querySelectorAll('h1 a, h2 a, h3 a');
-    console.log(`🔍 extractChapterTitle: Found ${h1Links.length} heading links`);
     
     for (const link of h1Links) {
       let text = link.textContent?.trim();
-      console.log(`🔍 extractChapterTitle: Heading link text: "${text}"`);
       
       if (text && text.length > 0 && text.length < 200) {
         const originalText = text;
@@ -498,11 +456,9 @@ export class SimpleEpubReader {
         text = text.replace(/^(Chapter\s+\d+:?\s*)/i, '').trim();
         text = text.replace(/^(\d+\.\s*)/i, '').trim();
         
-        console.log(`🔍 extractChapterTitle: Link after cleanup: "${originalText}" -> "${text}"`);
         
         // If we have meaningful text after cleanup, use it
         if (text.length > 0 && !text.match(/^(chapter|cap\\.?)\\s*\\d*$/i)) {
-          console.log(`✅ extractChapterTitle: Using heading link title: "${text}"`);
           return text;
         }
       }
@@ -544,12 +500,10 @@ export class SimpleEpubReader {
     }
     
     // Fallback
-    console.log(`⚠️ extractChapterTitle: Using fallback title for chapter ${fallbackNumber}`);
     return `Chapter ${fallbackNumber}`;
   }
 
   private extractChapterContent(doc: Document): string {
-    console.log('🔍 extractChapterContent: Starting extraction');
     
     // Remove unwanted elements
     const unwantedSelectors = [
@@ -565,11 +519,9 @@ export class SimpleEpubReader {
     // Get body or main content
     const body = doc.querySelector('body') || doc.documentElement;
     if (!body) {
-      console.log('⚠️ extractChapterContent: No body found');
       return '<p>No se pudo encontrar el contenido del capítulo</p>';
     }
     
-    console.log('🔍 extractChapterContent: Body found, innerHTML length:', body.innerHTML?.length);
     
     // Extract HTML content instead of just text
     let htmlContent = body.innerHTML || '';
@@ -588,16 +540,12 @@ export class SimpleEpubReader {
       .trim();
     
     if (linkCount > 0) {
-      console.log(`🔗 extractChapterContent: Removed ${linkCount} links from chapter content`);
     }
     
-    console.log('🔍 extractChapterContent: Cleaned HTML length:', htmlContent.length);
     
     // If no HTML content, fall back to text content formatted as paragraphs
     if (!htmlContent || htmlContent.length < 50) {
-      console.log('⚠️ extractChapterContent: HTML too short, trying text fallback');
       const textContent = body.textContent || '';
-      console.log('🔍 extractChapterContent: Text content length:', textContent.length);
       
       if (textContent.trim().length > 0) {
         const paragraphs = textContent
@@ -606,15 +554,12 @@ export class SimpleEpubReader {
           .map(p => `<p>${p.trim()}</p>`)
           .join('\n');
         
-        console.log('✅ extractChapterContent: Created paragraphs from text, length:', paragraphs.length);
         return paragraphs || '<p>Contenido de texto no disponible</p>';
       } else {
-        console.log('⚠️ extractChapterContent: No text content found, using fallback');
         return '<p>Contenido no disponible - archivo EPUB puede estar corrupto</p>';
       }
     }
     
-    console.log('✅ extractChapterContent: Returning HTML content, length:', htmlContent.length);
     return htmlContent;
   }
 }

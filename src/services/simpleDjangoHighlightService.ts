@@ -13,8 +13,7 @@ class SimpleDjangoHighlightService {
   private baseUrl: string;
 
   constructor() {
-    // Use environment variable or default to panel API
-    this.baseUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8002/panel/api';
+    this.baseUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
   }
 
   // Save highlight to your Django backend

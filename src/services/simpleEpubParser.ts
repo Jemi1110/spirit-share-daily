@@ -35,25 +35,20 @@ export class SimpleEpubParser extends EnhancedEpubParser {
     this.currentFile = file;
     
     try {
-      console.log('SimpleEpubParser: Starting enhanced EPUB parsing for:', file.name, 'Size:', file.size);
       
       // Load the EPUB as a ZIP file
       const zip = await JSZip.loadAsync(file);
       this.currentZip = zip;
-      console.log('SimpleEpubParser: ZIP loaded, files:', Object.keys(zip.files).length);
       
       // Find the OPF file (contains metadata and manifest)
       const opfPath = await this.findOpfFile(zip);
       this.currentOpfPath = opfPath;
-      console.log('SimpleEpubParser: Found OPF file:', opfPath);
       
       // Parse metadata using enhanced format
       const metadata = await this.parseEnhancedMetadata(zip, opfPath);
-      console.log('SimpleEpubParser: Parsed metadata:', metadata);
       
       // Use CONTENTS parser to get chapter structure
       const contentsResult = await contentsParser.parseContentsFromFile(file);
-      console.log(`SimpleEpubParser: CONTENTS parsing found ${contentsResult.totalRealChapters} real chapters`);
       
       // Extract full content for all chapters (no limits)
       const chaptersWithContent = await this.extractAllChapterContent(
@@ -71,7 +66,6 @@ export class SimpleEpubParser extends EnhancedEpubParser {
       );
       
       const parseTime = Date.now() - startTime;
-      console.log(`SimpleEpubParser: Parsing completed in ${parseTime}ms - ${classifiedContent.totalRealChapters} chapters`);
       
       return classifiedContent;
     } catch (error) {
@@ -165,8 +159,6 @@ export class SimpleEpubParser extends EnhancedEpubParser {
     const contentPath = opfPath.substring(0, opfPath.lastIndexOf('/') + 1);
     const chaptersWithContent: EnhancedEpubChapter[] = [];
 
-    console.log(`SimpleEpubParser: Extracting content for ${chapters.length} chapters (no limits)`);
-
     for (let i = 0; i < chapters.length; i++) {
       const chapter = chapters[i];
       
@@ -200,7 +192,6 @@ export class SimpleEpubParser extends EnhancedEpubParser {
 
         const wordCount = this.countWords(textContent);
         
-        console.log(`SimpleEpubParser: Chapter ${i + 1}: "${improvedTitle}" - Content: ${textContent.length} chars, ${wordCount} words`);
         
         chaptersWithContent.push({
           ...chapter,
@@ -223,7 +214,6 @@ export class SimpleEpubParser extends EnhancedEpubParser {
       }
     }
 
-    console.log(`SimpleEpubParser: Successfully extracted content for ${chaptersWithContent.filter(c => c.hasRealContent).length}/${chapters.length} chapters`);
     return chaptersWithContent;
   }
 

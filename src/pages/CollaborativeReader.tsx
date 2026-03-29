@@ -44,8 +44,6 @@ import { EnhancedCommentsPanel } from "@/components/EnhancedCommentsPanel";
 import { useCollaborativeHighlights } from "@/hooks/useCollaborativeHighlights";
 import { highlightService } from "@/services/highlightService";
 import { simpleDjangoHighlightService } from "@/services/simpleDjangoHighlightService";
-import { DjangoConnectionTest } from "@/components/DjangoConnectionTest";
-import { SimpleDjangoTest } from "@/components/SimpleDjangoTest";
 import { readingProgressService } from "@/services/readingProgressService";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
@@ -254,13 +252,9 @@ const CollaborativeReader = () => {
 
   // Debug logging for URL parameters
   useEffect(() => {
-    console.log('🔍 CollaborativeReader mounted with params:', { documentId, sessionId });
-    console.log('🔍 Current URL:', window.location.href);
 
     // If we ended up on a chapter file URL, go back immediately
     if (documentId && (documentId.includes('.xhtml') || documentId.includes('.html'))) {
-      console.log('🚨 Detected navigation to chapter file, going back');
-      console.log('🚨 This means our link interception failed');
 
       // Try to go back to the previous page
       if (window.history.length > 1) {
@@ -284,14 +278,12 @@ const CollaborativeReader = () => {
   const [isProgressLoaded, setIsProgressLoaded] = useState(false);
   const autoSaveCleanupRef = useRef<(() => void) | null>(null);
 
-
   const [loading, setLoading] = useState(true);
 
   // Simple EPUB state
   const [epubBook, setEpubBook] = useState<SimpleEpubBook | null>(null);
   const [currentChapterData, setCurrentChapterData] = useState<SimpleChapter | null>(null);
   const gloseReaderRef = useRef<{ navigateToChapter: (chapterNumber: number) => void }>(null);
-
 
   // Progressive loading state (Glose-style)
   const [epubLoadingProgress, setEpubLoadingProgress] = useState<{
@@ -393,11 +385,9 @@ const CollaborativeReader = () => {
         const djangoHighlights = await simpleDjangoHighlightService.loadHighlights();
 
         if (djangoHighlights.length > 0) {
-          console.log(`📚 Found ${djangoHighlights.length} saved highlights in Django backend`);
 
           // Only load if we don't already have highlights (avoid duplicates)
           if (highlights.length === 0) {
-            console.log(`📚 Loading ${djangoHighlights.length} saved highlights from Django`);
 
             // Convert Django format to frontend format
             djangoHighlights.forEach((djangoHighlight: any) => {
@@ -432,10 +422,8 @@ const CollaborativeReader = () => {
           const savedHighlights = localStorage.getItem(storageKey);
           if (savedHighlights) {
             const parsedHighlights = JSON.parse(savedHighlights);
-            console.log(`📚 Found ${parsedHighlights.length} saved highlights in localStorage (fallback)`);
 
             if (highlights.length === 0 && parsedHighlights.length > 0) {
-              console.log(`📚 Loading ${parsedHighlights.length} saved highlights from localStorage`);
               parsedHighlights.forEach((highlight: any) => {
                 createCollaborativeHighlight(highlight);
               });
@@ -453,8 +441,6 @@ const CollaborativeReader = () => {
     }
   }, [documentId, epubBook, highlights.length, createCollaborativeHighlight]);
 
-
-
   // Audio recording
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -470,8 +456,7 @@ const CollaborativeReader = () => {
   // DISABLED: Test book was interfering with real EPUB loading
   // useEffect(() => {
   //   if (!epubBook) {
-  //     console.log('🔧 Initializing test book for debugging');
-  const testBook: SimpleEpubBook = {
+  //  const testBook: SimpleEpubBook = {
     title: 'Libro de Prueba - Sistema Glose CONTENTS',
     author: 'Sistema de Debug',
     chapters: [
@@ -546,11 +531,8 @@ const CollaborativeReader = () => {
 
   //     setEpubBook(testBook);
   //     setTotalChapters(2);
-  //     console.log('✅ Test book initialized:', testBook.title);
-  //   }
+  //  //   }
   // }, [epubBook]);
-
-
 
   useEffect(() => {
     const initializeReader = async () => {
@@ -593,8 +575,6 @@ const CollaborativeReader = () => {
     };
   }, [documentId, sessionId]);
 
-
-
   // Debounce chapter changes to prevent loops
   const lastChapterChangeRef = useRef(0);
   const chapterChangeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -605,7 +585,6 @@ const CollaborativeReader = () => {
 
     // Ignore rapid changes (less than 500ms apart)
     if (now - lastChapterChangeRef.current < 500) {
-      console.log('🔄 Debouncing rapid chapter change:', chapterNumber);
       return;
     }
 
@@ -616,7 +595,6 @@ const CollaborativeReader = () => {
 
     // Set a timeout to actually change the chapter
     chapterChangeTimeoutRef.current = setTimeout(() => {
-      console.log('Chapter changed to:', chapterNumber);
       setCurrentChapter(chapterNumber);
       lastChapterChangeRef.current = now;
 
@@ -634,11 +612,6 @@ const CollaborativeReader = () => {
     boundingRect: DOMRect;
     chapterNumber: number;
   }) => {
-    console.log('🎯 HIGHLIGHT: Text selected for highlighting:', {
-      text: selection.selectedText.substring(0, 50),
-      chapter: selection.chapterNumber,
-      rect: selection.boundingRect
-    });
 
     setTextSelection({
       isActive: true,
@@ -654,10 +627,8 @@ const CollaborativeReader = () => {
       y: selection.boundingRect.top - 10
     };
 
-    console.log('🎯 HIGHLIGHT: Setting popup position:', popupPosition);
     setHighlightPopupPosition(popupPosition);
     setShowHighlightPopup(true);
-    console.log('🎯 HIGHLIGHT: Popup should now be visible');
   }, []);
 
   const handleSelectionCleared = useCallback(() => {
@@ -722,20 +693,8 @@ const CollaborativeReader = () => {
     // Create highlight collaboratively
     createCollaborativeHighlight(newHighlight);
 
-    console.log('✨ Created collaborative highlight:', {
-      id: highlightId,
-      text: textSelection.selectedText.substring(0, 50),
-      color,
-      chapter: textSelection.chapterNumber,
-      startOffset,
-      endOffset,
-      fullHighlight: newHighlight
-    });
-
     // Debug: Check if highlights array is updating
     setTimeout(() => {
-      console.log('🔍 Current highlights count:', highlights.length);
-      console.log('🔍 Latest highlights:', highlights.slice(-3));
     }, 100);
 
     // Clear selection
@@ -754,7 +713,6 @@ const CollaborativeReader = () => {
   }, [textSelection, handleSelectionCleared, createCollaborativeHighlight]);
 
   const handleHighlightClick = useCallback((highlight: Highlight, event: MouseEvent) => {
-    console.log('🖱️ Highlight clicked:', highlight.text.substring(0, 30));
 
     // Position comment popup near the click
     setHighlightPopupPosition({
@@ -780,11 +738,6 @@ const CollaborativeReader = () => {
     // Add comment collaboratively
     addCollaborativeComment(newComment);
 
-    console.log('💬 Added collaborative comment:', {
-      highlightId,
-      commentType: newComment.type,
-      content: newComment.content || newComment.emoji
-    });
   }, [addCollaborativeComment]);
 
   const handleEditComment = useCallback((highlightId: string, commentId: string, newContent: string) => {
@@ -792,13 +745,11 @@ const CollaborativeReader = () => {
       content: newContent
     });
 
-    console.log('✏️ Edited collaborative comment:', { highlightId, commentId });
   }, [updateCollaborativeComment]);
 
   const handleDeleteComment = useCallback((highlightId: string, commentId: string) => {
     deleteCollaborativeComment(highlightId, commentId);
 
-    console.log('🗑️ Deleted collaborative comment:', { highlightId, commentId });
   }, [deleteCollaborativeComment]);
 
   const handleDeleteHighlight = useCallback((highlightId: string) => {
@@ -816,14 +767,12 @@ const CollaborativeReader = () => {
       }
     });
 
-    console.log('🗑️ Deleted collaborative highlight:', highlightId);
   }, [deleteCollaborativeHighlight]);
 
   // Reaction management (placeholder for future implementation)
 
   const handleRemoveReaction = useCallback((highlightId: string, commentId: string, emoji: string) => {
     // This would be implemented with collaborative reactions
-    console.log('😐 Removed reaction:', { highlightId, commentId, emoji });
   }, []);
 
   // Navigation functions
@@ -846,23 +795,19 @@ const CollaborativeReader = () => {
         const progress = await readingProgressService.loadProgress(documentId, 'current-user');
 
         if (progress) {
-          console.log('📖 Restoring reading progress:', progress);
 
           // Restore chapter position
           if (progress.current_chapter !== currentChapter) {
-            console.log(`📖 Jumping to saved chapter: ${progress.current_chapter}`);
             navigateToChapter(progress.current_chapter);
           }
 
           // Restore scroll position after a short delay
           setTimeout(() => {
             window.scrollTo(0, progress.scroll_position);
-            console.log(`📖 Restored scroll position: ${progress.scroll_position}`);
           }, 500);
 
           toast.success(`Continuando desde el capítulo ${progress.current_chapter}`);
         } else {
-          console.log('📖 No previous reading progress found');
         }
 
         setIsProgressLoaded(true);
@@ -905,12 +850,10 @@ const CollaborativeReader = () => {
       updatedAt: new Date().toISOString()
     });
 
-    console.log('🎨 Changed highlight color:', { highlightId, newColor });
   }, [updateCollaborativeHighlight]);
 
   // Navigation to highlights
   const handleNavigateToHighlight = useCallback((highlightId: string, chapterNumber: number) => {
-    console.log('🧭 Navigating to highlight:', { highlightId, chapterNumber });
 
     // Navigate to chapter if not current
     if (chapterNumber !== currentChapter) {
@@ -964,8 +907,6 @@ const CollaborativeReader = () => {
     let file: File | null = null;
 
     try {
-      console.log('Starting EPUB parsing for:', doc.name);
-      console.log('Document file URL:', doc.file);
 
       // Show progress to user
       toast.info('Descargando archivo EPUB...');
@@ -977,7 +918,6 @@ const CollaborativeReader = () => {
           mode: 'cors',
           credentials: 'omit'
         });
-        console.log('File fetch response status:', fileResponse.status);
       } catch (fetchError) {
         console.error('Fetch error:', fetchError);
         if (fetchError.message.includes('CORS') || fetchError.message.includes('Failed to fetch')) {
@@ -991,7 +931,6 @@ const CollaborativeReader = () => {
       }
 
       const fileBlob = await fileResponse.blob();
-      console.log('File blob size:', fileBlob.size, 'bytes');
 
       if (fileBlob.size === 0) {
         throw new Error('EPUB file is empty');
@@ -1026,7 +965,6 @@ const CollaborativeReader = () => {
       toast.error(`Error al procesar el archivo EPUB: ${errorMessage}`);
 
       // Try a simpler approach - create a basic EPUB structure
-      console.log('Trying simpler EPUB approach...');
       try {
         // Fallback: create basic EPUB structure
         const fallbackBook: SimpleEpubBook = {
@@ -1063,7 +1001,6 @@ const CollaborativeReader = () => {
       }
 
       // Final fallback - force create a working EPUB structure
-      console.log('Forcing creation of basic EPUB structure');
       const forcedBook: SimpleEpubBook = {
         title: doc.name.replace(/\.(epub|EPUB)$/, '').replace(/_/g, ' '),
         author: 'Unknown Author',
@@ -1106,13 +1043,8 @@ const CollaborativeReader = () => {
 
   const loadDocument = async () => {
     try {
-      console.log('Loading document with ID:', documentId);
       const doc = await documentAPI.getById(documentId!);
-      console.log('Document loaded successfully:', doc);
       const docTyped = doc as any;
-      console.log('Document file URL:', docTyped.file);
-      console.log('Document file type:', docTyped.file_type);
-      console.log('Document file size:', docTyped.file_size);
       setDocumentData(doc);
 
       // Validate that this document supports collaborative reading
@@ -1124,7 +1056,6 @@ const CollaborativeReader = () => {
 
       // Parse EPUB/PDF content
       if (docTyped.file_type === 'epub') {
-        console.log('Loading EPUB with progressive reader (Glose-style):', docTyped.name);
 
         // Start loading state
         setEpubLoadingProgress({
@@ -1144,7 +1075,6 @@ const CollaborativeReader = () => {
 
           // Use progressive EPUB reader with progress callback
           const epubBook = await simpleEpubReader.loadEpub(file, (progress: EpubLoadingProgress) => {
-            console.log('EPUB Loading Progress:', progress);
 
             setEpubLoadingProgress({
               isLoading: progress.phase !== 'complete',
@@ -1157,11 +1087,9 @@ const CollaborativeReader = () => {
 
             // Update epubBook when new chapters are loaded
             if (progress.phase === 'background-loading' || progress.phase === 'complete') {
-              console.log(`📚 Updating epubBook with ${progress.chaptersLoaded} chapters (phase: ${progress.phase})`);
               // Force update by creating completely new object
               setEpubBook(currentBook => {
                 if (currentBook && currentBook.chapters.length !== progress.chaptersLoaded) {
-                  console.log(`🔄 Updating from ${currentBook.chapters.length} to ${progress.chaptersLoaded} chapters`);
                   // Create completely new book object to force React re-render
                   const newBook = {
                     title: currentBook.title,
@@ -1169,7 +1097,6 @@ const CollaborativeReader = () => {
                     chapters: currentBook.chapters.map(ch => ({ ...ch })), // Deep copy chapters
                     totalChapters: progress.totalChapters
                   };
-                  console.log(`✅ New book created with ${newBook.chapters.length} chapters`);
                   return newBook;
                 }
                 return currentBook;
@@ -1183,10 +1110,6 @@ const CollaborativeReader = () => {
               toast.success(`EPUB completamente cargado: ${progress.totalChapters} capítulos`);
             }
           });
-
-          console.log('Progressive EPUB loaded:', epubBook);
-          console.log('Initial chapters available:', epubBook.chapters.length);
-          console.log('Chapter details:', epubBook.chapters.map(ch => `Ch${ch.order}: "${ch.title}"`));
 
           setEpubBook(epubBook);
           setCurrentChapterData(epubBook.chapters[0]);
@@ -1233,7 +1156,6 @@ const CollaborativeReader = () => {
         setTotalChapters(5);
       }
 
-      console.log('Document setup complete');
       return doc; // Return the document for immediate use
     } catch (error) {
       console.error('Error loading document:', error);
@@ -1551,8 +1473,6 @@ const CollaborativeReader = () => {
         throw new Error('Document name is missing');
       }
 
-      console.log('Creating session for document:', documentToUse.name);
-
       // This would create a new collaborative session
       const newSession: CollaborativeSession = {
         id: `session-${Date.now()}`,
@@ -1575,7 +1495,6 @@ const CollaborativeReader = () => {
       setIsHost(true);
       setParticipants(newSession.participants);
 
-      console.log('Session created successfully:', newSession);
       toast.success(`Sesión colaborativa creada para "${documentToUse.name}"`);
     } catch (error) {
       console.error('Error creating session:', error);
@@ -1594,10 +1513,6 @@ const CollaborativeReader = () => {
     }
   };
 
-
-
-
-
   const navigateChapter = (direction: 'prev' | 'next') => {
     const newChapter = direction === 'prev' ? currentChapter - 1 : currentChapter + 1;
     if (newChapter >= 1 && newChapter <= totalChapters) {
@@ -1612,8 +1527,6 @@ const CollaborativeReader = () => {
     }
   };
 
-
-
   // No need for complex blocking - just remove all links from content
 
   // NUCLEAR navigation prevention
@@ -1623,11 +1536,9 @@ const CollaborativeReader = () => {
 
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       const targetUrl = window.location.href;
-      console.log('🚨 Navigation attempt to:', targetUrl);
 
       // If it's trying to navigate to a chapter file, prevent it
       if (targetUrl.includes('.xhtml') || targetUrl.includes('.html')) {
-        console.log('🚫 PREVENTING navigation to chapter file');
         event.preventDefault();
         event.returnValue = 'Permaneciendo en la sesión de lectura';
         return 'Permaneciendo en la sesión de lectura';
@@ -1641,7 +1552,6 @@ const CollaborativeReader = () => {
     history.pushState = function (state, title, url) {
       const urlStr = url?.toString() || '';
       if (urlStr && (urlStr.includes('.xhtml') || urlStr.includes('.html'))) {
-        console.log('🚫 BLOCKED pushState to:', urlStr);
         return;
       }
       return originalPushState.call(this, state, title, url);
@@ -1650,7 +1560,6 @@ const CollaborativeReader = () => {
     history.replaceState = function (state, title, url) {
       const urlStr = url?.toString() || '';
       if (urlStr && (urlStr.includes('.xhtml') || urlStr.includes('.html'))) {
-        console.log('🚫 BLOCKED replaceState to:', urlStr);
         return;
       }
       return originalReplaceState.call(this, state, title, url);
@@ -1666,8 +1575,6 @@ const CollaborativeReader = () => {
       };
     }
   }, []);
-
-
 
   if (loading) {
     return (
@@ -2296,26 +2203,15 @@ const CollaborativeReader = () => {
           <Highlighter className="h-5 w-5 mx-auto" />
         </button>
 
-        {/* Simple Django Test */}
-        <SimpleDjangoTest />
-
-        {/* Django Connection Test */}
-        <div className="mb-4">
-          <DjangoConnectionTest />
-        </div>
-
         {/* Test Highlight Button */}
         <button
           onClick={() => {
-            console.log('🧪 TEST: Creating test highlight with real text');
 
             // Get the first few words from the current chapter
             const chapterElement = document.querySelector(`[data-chapter="${currentChapter}"]`);
             if (chapterElement) {
               const chapterText = chapterElement.textContent || '';
               const firstWords = chapterText.trim().split(' ').slice(0, 3).join(' '); // First 3 words
-
-              console.log('🧪 TEST: Using real text from chapter:', firstWords);
 
               const testHighlight = {
                 id: `test_${Date.now()}`,
@@ -2533,7 +2429,6 @@ const CollaborativeReader = () => {
                     const isAuxiliary = isAuxiliaryChapter(chapter.title);
                     const shouldShow = showAuxiliaryContent || !isAuxiliary;
 
-
                     if (!shouldShow) return null;
 
                     return { chapter, originalIndex };
@@ -2551,7 +2446,6 @@ const CollaborativeReader = () => {
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          console.log(`🖱️ Table of contents button clicked for chapter ${originalIndex + 1}`);
                           navigateToChapter(originalIndex + 1);
                         }}
                         className={`w-full text-left p-4 rounded-xl transition-all group ${isCurrentChapter

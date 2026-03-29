@@ -47,18 +47,14 @@ class EpubReader extends EnhancedEpubParser {
     this.currentFile = file;
     
     try {
-      console.log('EpubReader: Starting enhanced EPUB parsing with epub.js for:', file.name, 'Size:', file.size);
       
       // Create a blob URL for the file
       const fileUrl = URL.createObjectURL(file);
-      console.log('EpubReader: Created blob URL:', fileUrl);
       
       // Load the EPUB using epub.js
-      console.log('EpubReader: Creating ePub instance...');
       this.book = ePub(fileUrl);
       
       // Wait for the book to be ready with timeout and error handling
-      console.log('EpubReader: Waiting for book to be ready...');
       try {
         await Promise.race([
           this.book.ready,
@@ -66,25 +62,19 @@ class EpubReader extends EnhancedEpubParser {
             setTimeout(() => reject(new Error('EPUB loading timeout')), 15000) // Increased timeout
           )
         ]);
-        console.log('EpubReader: Book is ready');
       } catch (readyError) {
         console.warn('EpubReader: Book ready timeout, trying to continue anyway:', readyError);
         // Try to continue even if ready times out - the book might still be partially loaded
       }
       
       // Parse enhanced metadata
-      console.log('EpubReader: Parsing enhanced metadata...');
       const metadata = await this.parseEnhancedMetadata();
-      console.log('EpubReader: Enhanced metadata parsed:', metadata);
       
       // Use CONTENTS parser to get chapter structure from epub.js book
-      console.log('EpubReader: Using CONTENTS parser with epub.js book...');
       const contentsResult = await contentsParser.parseContentsFromEpubJs(this.book);
-      console.log(`EpubReader: CONTENTS parsing found ${contentsResult.totalRealChapters} real chapters`);
       
       // If CONTENTS parser didn't find much, try our own epub.js parsing as fallback
       if (!contentsResult.contentsFound || contentsResult.chapters.length === 0) {
-        console.log('EpubReader: CONTENTS parser failed, using epub.js TOC as fallback...');
         const epubJsChapters = await this.parseEpubJsTableOfContents();
         
         // Convert epub.js chapters to enhanced format
@@ -113,7 +103,6 @@ class EpubReader extends EnhancedEpubParser {
         URL.revokeObjectURL(fileUrl);
         
         const parseTime = Date.now() - startTime;
-        console.log(`EpubReader: Fallback parsing completed in ${parseTime}ms - ${classifiedContent.totalRealChapters} chapters`);
         
         return classifiedContent;
       }
@@ -132,7 +121,6 @@ class EpubReader extends EnhancedEpubParser {
       URL.revokeObjectURL(fileUrl);
       
       const parseTime = Date.now() - startTime;
-      console.log(`EpubReader: Enhanced parsing completed in ${parseTime}ms - ${classifiedContent.totalRealChapters} chapters`);
       
       return classifiedContent;
     } catch (error) {
@@ -147,7 +135,6 @@ class EpubReader extends EnhancedEpubParser {
    */
   async parseEpubLegacy(file: File): Promise<ParsedEpub> {
     try {
-      console.log('EpubReader: Starting legacy EPUB parsing with epub.js for:', file.name, 'Size:', file.size);
       
       // Use the enhanced parser and convert to legacy format
       const classifiedContent = await this.parseEpub(file);
@@ -169,7 +156,6 @@ class EpubReader extends EnhancedEpubParser {
         cover: classifiedContent.metadata.cover
       };
       
-      console.log('EpubReader: Legacy parsing completed successfully');
       
       return {
         metadata: legacyMetadata,
@@ -200,7 +186,6 @@ class EpubReader extends EnhancedEpubParser {
       // Method 1: Try package.metadata
       if (this.book.package?.metadata) {
         metadata = this.book.package.metadata;
-        console.log('EpubReader: Found metadata via package.metadata:', metadata);
       }
       
       // Method 2: Try loaded.metadata
@@ -208,7 +193,6 @@ class EpubReader extends EnhancedEpubParser {
         try {
           const loadedMetadata = await this.book.loaded.metadata;
           metadata = loadedMetadata;
-          console.log('EpubReader: Found metadata via loaded.metadata:', metadata);
         } catch (e) {
           console.warn('EpubReader: Error loading metadata:', e);
         }
@@ -223,7 +207,6 @@ class EpubReader extends EnhancedEpubParser {
           language: this.book.packaging?.metadata?.language || this.book.metadata?.language,
           publisher: this.book.packaging?.metadata?.publisher || this.book.metadata?.publisher
         };
-        console.log('EpubReader: Found metadata via direct access:', metadata);
       }
       
       return {
@@ -263,7 +246,6 @@ class EpubReader extends EnhancedEpubParser {
     
     try {
       // Try to load navigation with timeout
-      console.log('EpubReader: Attempting to load navigation...');
       const navigation = await Promise.race([
         this.book.loaded.navigation,
         new Promise((_, reject) => 
@@ -271,11 +253,9 @@ class EpubReader extends EnhancedEpubParser {
         )
       ]);
       
-      console.log('EpubReader: Navigation loaded:', navigation);
       
       // If we have a proper table of contents
       if (navigation?.toc && navigation.toc.length > 0) {
-        console.log('EpubReader: Found TOC with', navigation.toc.length, 'items');
         navigation.toc.forEach((item: any, index: number) => {
           chapters.push({
             id: item.id || `chapter-${index}`,
@@ -304,16 +284,12 @@ class EpubReader extends EnhancedEpubParser {
     // Fallback: use spine items if no TOC or navigation failed
     if (chapters.length === 0) {
       try {
-        console.log('EpubReader: Trying to access spine...');
         const spine = this.book.spine;
-        console.log('EpubReader: Spine object:', spine);
         
         if (spine) {
           // Try different ways to access spine items (NO ARTIFICIAL LIMITS)
           if (spine.each && typeof spine.each === 'function') {
-            console.log('EpubReader: Using spine.each method');
             spine.each((section: any, index: number) => {
-              console.log('EpubReader: Spine section:', section);
               chapters.push({
                 id: section.idref || `spine-${index}`,
                 title: section.title || `Chapter ${index + 1}`,
@@ -322,7 +298,6 @@ class EpubReader extends EnhancedEpubParser {
               });
             });
           } else if (spine.spineItems && Array.isArray(spine.spineItems)) {
-            console.log('EpubReader: Using spine.spineItems array - processing ALL items');
             spine.spineItems.forEach((section: any, index: number) => {
               chapters.push({
                 id: section.idref || `spine-${index}`,
@@ -332,7 +307,6 @@ class EpubReader extends EnhancedEpubParser {
               });
             });
           } else if (Array.isArray(spine)) {
-            console.log('EpubReader: Spine is an array - processing ALL items');
             spine.forEach((section: any, index: number) => {
               chapters.push({
                 id: section.idref || `spine-${index}`,
@@ -350,7 +324,6 @@ class EpubReader extends EnhancedEpubParser {
     
     // Last resort: create a single chapter if we still have nothing
     if (chapters.length === 0) {
-      console.log('EpubReader: Creating fallback chapter');
       chapters.push({
         id: 'chapter-1',
         title: 'Chapter 1',
@@ -359,7 +332,6 @@ class EpubReader extends EnhancedEpubParser {
       });
     }
     
-    console.log(`EpubReader: Final chapters array: ${chapters.length} chapters found`);
     return chapters.sort((a, b) => a.order - b.order);
   }
 

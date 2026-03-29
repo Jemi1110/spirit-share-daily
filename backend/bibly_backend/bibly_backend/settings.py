@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -20,12 +21,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-y-1ybngg%lmx(&e_%9m%w%760mi@-pvva#^x2a8yw9^1hy_t*0'
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-dev-only-change-in-production')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() == 'true'
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0']
+ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1,0.0.0.0').split(',')
 
 
 # Application definition
@@ -67,8 +68,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:8081",  # Your current frontend port
 ]
 
-# For development, allow all origins (remove in production)
-CORS_ALLOW_ALL_ORIGINS = True
+# For development, allow all origins. Set DJANGO_CORS_ALLOW_ALL=false in production.
+CORS_ALLOW_ALL_ORIGINS = os.environ.get('DJANGO_CORS_ALLOW_ALL', 'True').lower() == 'true'
 CORS_ALLOW_CREDENTIALS = True
 
 ROOT_URLCONF = 'bibly_backend.urls'
@@ -139,7 +140,6 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 # Media files configuration
-import os
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 

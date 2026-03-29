@@ -39,9 +39,7 @@ const Blog = () => {
 
   const loadArticles = async () => {
     try {
-      console.log('Loading blog articles...');
       const data = await blogAPI.getAll();
-      console.log('Blog articles loaded:', data);
       setArticles(data as BlogArticle[]);
     } catch (error) {
       console.error('Error loading articles:', error);

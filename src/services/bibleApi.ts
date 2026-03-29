@@ -129,7 +129,6 @@ export const externalBibleAPI = {
             return !isIntro;
         });
         
-        console.log(`Filtered chapters for ${bookId}: ${allChapters.length} → ${filteredChapters.length} (removed ${allChapters.length - filteredChapters.length} intro chapters)`);
         
         return filteredChapters;
     },

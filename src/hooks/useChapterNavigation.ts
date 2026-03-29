@@ -102,7 +102,6 @@ export function useChapterNavigation(options: UseChapterNavigationOptions = {}):
 
   // Event handlers
   const handleChapterChanged = useCallback((event: NavigationEvent) => {
-    console.log('useChapterNavigation: Chapter changed event:', event);
     
     if (event.data.chapter) {
       setCurrentChapter(event.data.chapter);
@@ -122,7 +121,6 @@ export function useChapterNavigation(options: UseChapterNavigationOptions = {}):
   }, []);
 
   const handleProgressUpdated = useCallback((event: NavigationEvent) => {
-    console.log('useChapterNavigation: Progress updated event:', event);
     
     if (controllerRef.current) {
       setProgressInfo(controllerRef.current.getProgressInfo());
@@ -158,7 +156,6 @@ export function useChapterNavigation(options: UseChapterNavigationOptions = {}):
       setChapterList(controllerRef.current.getChapterList());
       setProgressInfo(controllerRef.current.getProgressInfo());
       
-      console.log('useChapterNavigation: Initialization complete');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       setError(errorMessage);

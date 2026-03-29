@@ -17,14 +17,12 @@ class ReadingProgressService {
   private baseUrl: string;
 
   constructor() {
-    // Use Vite environment variable or default to Django API
     this.baseUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
   }
 
   // Save reading progress to Django backend
   async saveProgress(progress: any): Promise<void> {
     try {
-      console.log('💾 Saving reading progress:', progress);
       
       const csrfToken = await this.getCSRFToken();
       const response = await fetch(`${this.baseUrl}/reading-progress/`, {
@@ -38,7 +36,6 @@ class ReadingProgressService {
       });
 
       if (response.ok) {
-        console.log('✅ Reading progress saved to Django');
       } else {
         const errorText = await response.text();
         console.error(`❌ Failed to save progress to Django (${response.status}):`, errorText);
@@ -63,7 +60,6 @@ class ReadingProgressService {
   // Load reading progress from Django backend
   async loadProgress(documentId: string, userId: string): Promise<ReadingProgress | null> {
     try {
-      console.log('📚 Loading reading progress for:', documentId);
       
       const csrfToken = await this.getCSRFToken();
       const response = await fetch(`${this.baseUrl}/reading-progress/?document_id=${documentId}`, {
@@ -76,7 +72,6 @@ class ReadingProgressService {
       if (response.ok) {
         const progressData = await response.json();
         if (progressData.length > 0) {
-          console.log('✅ Loaded reading progress from Django:', progressData[0]);
           return progressData[0];
         }
       }
@@ -108,12 +103,9 @@ class ReadingProgressService {
       this.saveProgress(progress);
     }, 10000); // Save every 10 seconds
 
-    console.log('🔄 Auto-save reading progress started');
-
     // Return cleanup function
     return () => {
       clearInterval(interval);
-      console.log('🛑 Auto-save reading progress stopped');
     };
   }
 
@@ -122,7 +114,6 @@ class ReadingProgressService {
     try {
       const storageKey = `reading_progress_${progress.document_id}_current-user`;
       localStorage.setItem(storageKey, JSON.stringify(progress));
-      console.log('💾 Reading progress saved to localStorage');
     } catch (error) {
       console.error('Error saving progress to localStorage:', error);
     }
@@ -134,7 +125,6 @@ class ReadingProgressService {
       const saved = localStorage.getItem(storageKey);
       if (saved) {
         const progress = JSON.parse(saved);
-        console.log('📚 Loaded reading progress from localStorage:', progress);
         return progress;
       }
     } catch (error) {
@@ -163,7 +153,6 @@ class ReadingProgressService {
     if (!token) {
       // Fallback: fetch CSRF token from Django endpoint
       try {
-        console.log('🔐 Fetching CSRF token from Django...');
         const response = await fetch(`${this.baseUrl}/csrf/`, {
           credentials: 'include'
         });
@@ -171,7 +160,6 @@ class ReadingProgressService {
         if (response.ok) {
           const data = await response.json();
           token = data.csrfToken;
-          console.log('✅ CSRF token fetched from Django');
         }
       } catch (error) {
         console.warn('⚠️ Could not fetch CSRF token from Django:', error);

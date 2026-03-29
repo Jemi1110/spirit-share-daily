@@ -34,7 +34,6 @@ export class ContentsParser {
    */
   async parseContentsFromFile(file: File): Promise<ContentsParseResult> {
     try {
-      console.log('ContentsParser: Starting CONTENTS parsing for:', file.name);
       
       const zip = await JSZip.loadAsync(file);
       const opfPath = await this.findOpfFile(zip);
@@ -43,19 +42,16 @@ export class ContentsParser {
       let result = await this.parseFromContentsSection(zip, opfPath);
       
       if (!result.contentsFound) {
-        console.log('ContentsParser: CONTENTS section not found, trying TOC navigation');
         result = await this.parseFromTocNavigation(zip, opfPath);
       }
       
       if (result.chapters.length === 0) {
-        console.log('ContentsParser: No chapters found, using spine fallback');
         result = await this.parseFromSpineFallback(zip, opfPath);
       }
       
       // Classify chapters and filter auxiliary content
       result = this.classifyAndFilterChapters(result);
       
-      console.log(`ContentsParser: Found ${result.totalRealChapters} real chapters, ${result.auxiliaryContent.length} auxiliary items`);
       
       return result;
     } catch (error) {
@@ -69,7 +65,6 @@ export class ContentsParser {
    */
   async parseContentsFromEpubJs(book: any): Promise<ContentsParseResult> {
     try {
-      console.log('ContentsParser: Parsing from epub.js book instance');
       
       let result: ContentsParseResult = {
         chapters: [],
@@ -91,7 +86,6 @@ export class ContentsParser {
         ]);
 
         if (navigation?.toc && navigation.toc.length > 0) {
-          console.log('ContentsParser: Found TOC with', navigation.toc.length, 'items');
           
           navigation.toc.forEach((item: any, index: number) => {
             result.chapters.push({
@@ -128,20 +122,16 @@ export class ContentsParser {
 
       // Fallback to spine if no TOC found OR if we only found 1 chapter (likely incomplete)
       if (result.chapters.length <= 1) {
-        console.log(`ContentsParser: Using spine fallback for epub.js (found ${result.chapters.length} chapters, need more)`);
         result.parseMethod = 'spine-fallback';
         result.chapters = []; // Clear the incomplete results
         
         try {
           const spine = book.spine;
-          console.log('ContentsParser: Spine object:', spine);
           
           if (spine) {
             // Try different ways to access spine items
             if (spine.each && typeof spine.each === 'function') {
-              console.log('ContentsParser: Using spine.each method');
               spine.each((section: any, index: number) => {
-                console.log(`ContentsParser: Spine section ${index}:`, section);
                 result.chapters.push({
                   id: section.idref || `spine-${index}`,
                   title: section.title || `Chapter ${index + 1}`,
@@ -153,9 +143,7 @@ export class ContentsParser {
                 });
               });
             } else if (spine.spineItems && Array.isArray(spine.spineItems)) {
-              console.log(`ContentsParser: Using spine.spineItems array with ${spine.spineItems.length} items`);
               spine.spineItems.forEach((section: any, index: number) => {
-                console.log(`ContentsParser: Spine item ${index}:`, section);
                 result.chapters.push({
                   id: section.idref || `spine-${index}`,
                   title: section.title || `Chapter ${index + 1}`,
@@ -167,7 +155,6 @@ export class ContentsParser {
                 });
               });
             } else if (Array.isArray(spine)) {
-              console.log(`ContentsParser: Spine is an array with ${spine.length} items`);
               spine.forEach((section: any, index: number) => {
                 result.chapters.push({
                   id: section.idref || `spine-${index}`,
@@ -182,7 +169,6 @@ export class ContentsParser {
             }
           }
           
-          console.log(`ContentsParser: Spine fallback found ${result.chapters.length} chapters`);
         } catch (spineError) {
           console.warn('ContentsParser: Spine parsing failed:', spineError);
         }
@@ -223,8 +209,6 @@ export class ContentsParser {
         );
       });
 
-      console.log('ContentsParser: Found possible CONTENTS files:', possibleContentsFiles);
-
       for (const filename of possibleContentsFiles) {
         const file = zip.file(filename);
         if (!file) continue;
@@ -247,13 +231,11 @@ export class ContentsParser {
             
             // Skip if it's auxiliary content (including CONTENTS itself)
             if (this.isAuxiliaryContent(title)) {
-              console.log(`ContentsParser: Skipping auxiliary content: "${title}"`);
               continue;
             }
             
             // Additional check: must look like a real chapter
             if (!this.looksLikeRealChapter(title)) {
-              console.log(`ContentsParser: Skipping non-chapter content: "${title}"`);
               continue;
             }
             
@@ -269,13 +251,11 @@ export class ContentsParser {
             });
             
             chapterIndex++;
-            console.log(`ContentsParser: Added real chapter: "${title}"`);
           }
         }
 
         if (result.chapters.length > 0) {
           result.contentsFound = true;
-          console.log(`ContentsParser: Found ${result.chapters.length} chapters in CONTENTS section`);
           break;
         }
       }
@@ -345,7 +325,6 @@ export class ContentsParser {
             
             if (result.chapters.length > 0) {
               result.contentsFound = true;
-              console.log(`ContentsParser: Found ${result.chapters.length} chapters in NCX`);
             }
           }
         }
@@ -381,7 +360,6 @@ export class ContentsParser {
       
       // Get ALL spine items (no artificial limit)
       const spineItems = Array.from(opfDoc.querySelectorAll('spine itemref'));
-      console.log(`ContentsParser: Found ${spineItems.length} spine items (no limit applied)`);
 
       for (let i = 0; i < spineItems.length; i++) {
         const itemref = spineItems[i];
@@ -428,7 +406,6 @@ export class ContentsParser {
         });
       }
 
-      console.log(`ContentsParser: Created ${result.chapters.length} chapters from spine`);
     } catch (error) {
       console.warn('ContentsParser: Error parsing spine fallback:', error);
     }
@@ -443,12 +420,9 @@ export class ContentsParser {
     const realChapters: EnhancedEpubChapter[] = [];
     const auxiliaryContent: EnhancedEpubChapter[] = [];
 
-    console.log(`ContentsParser: Classifying ${result.chapters.length} chapters`);
-
     for (const chapter of result.chapters) {
       const isAuxiliary = this.isAuxiliaryContent(chapter.title);
       
-      console.log(`ContentsParser: Chapter "${chapter.title}" -> ${isAuxiliary ? 'AUXILIARY' : 'REAL CHAPTER'}`);
       
       if (isAuxiliary) {
         chapter.type = 'auxiliary';
@@ -461,11 +435,8 @@ export class ContentsParser {
       }
     }
 
-    console.log(`ContentsParser: Classification result: ${realChapters.length} real chapters, ${auxiliaryContent.length} auxiliary`);
-
     // If we have very few real chapters, be less aggressive about filtering
     if (realChapters.length <= 1 && result.chapters.length > 1) {
-      console.log('ContentsParser: Too few real chapters found, treating all as real chapters');
       return {
         ...result,
         chapters: result.chapters.map(ch => ({ ...ch, type: 'chapter', isVisible: true })),

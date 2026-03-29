@@ -29,8 +29,6 @@ export const GloseScrollReader = React.forwardRef<GloseScrollReaderRef, GloseScr
   // Progressive loading like Glose - load first few chapters, then load more as user scrolls
   useEffect(() => {
     if (epubBook && epubBook.chapters.length > 0) {
-      console.log('GloseScrollReader: Initializing progressive loading for', epubBook.chapters.length, 'chapters');
-      console.log('GloseScrollReader: Received chapters:', epubBook.chapters.slice(0, 3).map(ch => `Ch${ch.order}: "${ch.title}"`));
       
       const chunks: ContentChunk[] = epubBook.chapters.map((chapter, index) => ({
         chapterOrder: chapter.order,
@@ -40,8 +38,6 @@ export const GloseScrollReader = React.forwardRef<GloseScrollReaderRef, GloseScr
       }));
       
       setContentChunks(chunks);
-      console.log(`GloseScrollReader: Loaded ${chunks.length} chapters for smooth reading`);
-      console.log('GloseScrollReader: Chapter orders:', chunks.slice(0, 5).map(c => c.chapterOrder));
     }
   }, [epubBook, epubBook?.chapters?.length]); // Also depend on chapters length
 
@@ -53,7 +49,6 @@ export const GloseScrollReader = React.forwardRef<GloseScrollReaderRef, GloseScr
       for (let i = currentChapterIndex; i < Math.min(currentChapterIndex + 3, updated.length); i++) {
         if (!updated[i].isLoaded) {
           updated[i] = { ...updated[i], isLoaded: true };
-          console.log(`GloseScrollReader: Progressively loaded chapter ${i + 1}: "${updated[i].chapterTitle}"`);
         }
       }
       return updated;
@@ -62,21 +57,18 @@ export const GloseScrollReader = React.forwardRef<GloseScrollReaderRef, GloseScr
 
   // Navigation function for external control
   const navigateToChapter = useCallback((chapterNumber: number) => {
-    console.log(`🔍 GloseScrollReader: Navigating to chapter ${chapterNumber}`);
     
     // Simple approach: just scroll to the chapter (all chapters should be loaded now)
     setTimeout(() => {
       const chapterElement = document.querySelector(`[data-chapter="${chapterNumber}"]`);
       
       if (chapterElement) {
-        console.log(`✅ GloseScrollReader: Scrolling to chapter ${chapterNumber}`);
         chapterElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
       } else {
         console.warn(`⚠️ GloseScrollReader: Chapter ${chapterNumber} not found`);
         // Check what chapters are available
         const allChapters = document.querySelectorAll('[data-chapter]');
         const availableChapters = Array.from(allChapters).map(el => el.getAttribute('data-chapter'));
-        console.log(`Available chapters:`, availableChapters);
       }
     }, 100);
   }, []);

@@ -22,3 +22,20 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Python / Django
+*.pyc
+__pycache__/
+*.sqlite3
+db.sqlite3
+venv/
+.venv/
+*.egg-info/
+*.egg
+.python-version
+backend/bibly_backend/media/
+
+# Environment files
+.env
+.env.local
+.env.production

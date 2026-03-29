@@ -68,12 +68,10 @@ export const useCollaborativeHighlights = ({
   const connect = useCallback(() => {
     try {
       // For now, we'll simulate the connection
-      console.log(`🔗 Connecting to collaborative session: ${sessionId}`);
       
       // Simulate connection success immediately (no timeout to avoid loops)
       setIsConnected(true);
       reconnectAttempts.current = 0;
-      console.log('✅ Connected to collaborative session');
       
       // Initialize with empty highlights
       const existingHighlights: Highlight[] = [];
@@ -91,7 +89,6 @@ export const useCollaborativeHighlights = ({
       const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
       reconnectAttempts.current++;
       
-      console.log(`🔄 Scheduling reconnect attempt ${reconnectAttempts.current} in ${delay}ms`);
       
       reconnectTimeoutRef.current = setTimeout(() => {
         connect();
@@ -117,8 +114,6 @@ export const useCollaborativeHighlights = ({
       sessionId
     };
 
-    console.log('📡 Broadcasting event:', fullEvent.type, fullEvent.data);
-
     // In real implementation, this would send via WebSocket:
     // wsRef.current?.send(JSON.stringify(fullEvent));
 
@@ -130,7 +125,6 @@ export const useCollaborativeHighlights = ({
 
   // Handle incoming collaborative events
   const handleCollaborativeEvent = useCallback((event: CollaborativeEvent) => {
-    console.log('📥 Received collaborative event:', event.type, event.data);
 
     // Don't process our own events
     if (event.userId === userId) {
@@ -212,16 +206,10 @@ export const useCollaborativeHighlights = ({
 
   // Public methods for managing highlights collaboratively
   const createHighlight = useCallback((highlight: Highlight) => {
-    console.log('🔥 useCollaborativeHighlights: Creating highlight:', {
-      id: highlight.id,
-      text: highlight.text.substring(0, 30),
-      chapter: highlight.chapterNumber
-    });
 
     // Update local state immediately
     setHighlights(prev => {
       const newHighlights = [...prev, highlight];
-      console.log('🔥 useCollaborativeHighlights: Updated highlights array:', newHighlights.length);
       onHighlightUpdate?.(newHighlights);
       return newHighlights;
     });

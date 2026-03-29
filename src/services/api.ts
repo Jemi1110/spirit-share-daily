@@ -1,6 +1,5 @@
 // API service for Django backend integration
-// Replace BASE_URL with your Django backend URL
-const BASE_URL = 'http://127.0.0.1:8000/api';
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
 
 // Token management
 export const getToken = () => localStorage.getItem('access_token');
@@ -23,7 +22,6 @@ async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<
 
   // If we get 401 and it's a GET request, try again without token
   if (!response.ok && response.status === 401 && (!options.method || options.method === 'GET')) {
-    console.log('401 error on GET request, retrying without token...');
     removeToken(); // Clear invalid token
     
     // Retry without Authorization header

@@ -26,14 +26,12 @@ class HighlightService {
   private baseUrl: string;
 
   constructor() {
-    // Use environment variable or default to your Django backend
-    this.baseUrl = (typeof process !== 'undefined' && process.env?.REACT_APP_API_URL) || 'http://127.0.0.1:8000/admin/api';
+    this.baseUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
   }
 
   // Save highlight to your existing Django backend
   async saveHighlight(highlight: HighlightData): Promise<HighlightData> {
     try {
-      console.log('💾 Saving highlight to Django backend:', highlight.id);
       
       // Adapt to your existing Django API structure
       const highlightPayload = {
@@ -63,7 +61,6 @@ class HighlightService {
       }
 
       const savedHighlight = await response.json();
-      console.log('✅ Highlight saved to Django backend:', savedHighlight.id);
       return savedHighlight;
     } catch (error) {
       console.error('❌ Error saving highlight to Django backend:', error);
@@ -76,7 +73,6 @@ class HighlightService {
   // Load highlights from your Django backend
   async loadHighlights(documentId: string, userId?: string): Promise<HighlightData[]> {
     try {
-      console.log('📚 Loading highlights from Django backend for document:', documentId);
       
       const url = new URL(`${this.baseUrl}/highlight/`);
       url.searchParams.append('document_id', documentId);
@@ -115,7 +111,6 @@ class HighlightService {
         updatedAt: h.updated_at || h.created_at
       }));
 
-      console.log(`✅ Loaded ${highlights.length} highlights from Django backend`);
       return highlights;
     } catch (error) {
       console.error('❌ Error loading highlights from Django backend:', error);
@@ -127,7 +122,6 @@ class HighlightService {
   // Update highlight in database
   async updateHighlight(highlightId: string, updates: Partial<HighlightData>): Promise<HighlightData> {
     try {
-      console.log('🔄 Updating highlight in database:', highlightId);
       
       const response = await fetch(`${this.baseUrl}/highlight/${highlightId}/`, {
         method: 'PATCH',
@@ -143,7 +137,6 @@ class HighlightService {
       }
 
       const updatedHighlight = await response.json();
-      console.log('✅ Highlight updated in database:', updatedHighlight.id);
       return updatedHighlight;
     } catch (error) {
       console.error('❌ Error updating highlight in database:', error);
@@ -154,7 +147,6 @@ class HighlightService {
   // Delete highlight from database
   async deleteHighlight(highlightId: string): Promise<void> {
     try {
-      console.log('🗑️ Deleting highlight from database:', highlightId);
       
       const response = await fetch(`${this.baseUrl}/highlight/${highlightId}/`, {
         method: 'DELETE',
@@ -167,7 +159,6 @@ class HighlightService {
         throw new Error(`Failed to delete highlight: ${response.statusText}`);
       }
 
-      console.log('✅ Highlight deleted from database:', highlightId);
     } catch (error) {
       console.error('❌ Error deleting highlight from database:', error);
       throw error;
@@ -176,17 +167,15 @@ class HighlightService {
 
   // Real-time collaboration via WebSocket (Django Channels)
   subscribeToHighlightUpdates(documentId: string, callback: (highlight: HighlightData, action: 'created' | 'updated' | 'deleted') => void): () => void {
-    const wsUrl = (typeof process !== 'undefined' && process.env?.REACT_APP_WS_URL) || 'ws://127.0.0.1:8000';
+    const wsUrl = import.meta.env.VITE_WS_URL || 'ws://127.0.0.1:8000';
     const ws = new WebSocket(`${wsUrl}/ws/highlights/${documentId}/`);
 
     ws.onopen = () => {
-      console.log('🔗 Connected to Django highlight updates WebSocket');
     };
 
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        console.log('📡 Received highlight update from Django:', data);
         callback(data.highlight, data.action);
       } catch (error) {
         console.error('Error parsing WebSocket message:', error);
@@ -198,7 +187,6 @@ class HighlightService {
     };
 
     ws.onclose = () => {
-      console.log('🔌 Disconnected from Django highlight updates WebSocket');
     };
 
     // Return cleanup function
@@ -222,7 +210,6 @@ class HighlightService {
       }
       
       localStorage.setItem(storageKey, JSON.stringify(highlights));
-      console.log('💾 Saved highlight to localStorage as fallback');
     } catch (error) {
       console.error('Error saving to localStorage:', error);
     }
@@ -234,7 +221,6 @@ class HighlightService {
       const saved = localStorage.getItem(storageKey);
       if (saved) {
         const highlights = JSON.parse(saved);
-        console.log(`📚 Loaded ${highlights.length} highlights from localStorage fallback`);
         return highlights;
       }
       return [];
@@ -277,13 +263,11 @@ class HighlightService {
         !onlineHighlights.find(online => online.id === offline.id)
       );
 
-      console.log(`🔄 Syncing ${toSync.length} offline highlights`);
       
       for (const highlight of toSync) {
         await this.saveHighlight(highlight);
       }
       
-      console.log('✅ Offline highlights synced successfully');
     } catch (error) {
       console.error('❌ Error syncing offline highlights:', error);
     }

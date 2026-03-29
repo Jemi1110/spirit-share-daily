@@ -214,7 +214,6 @@ export const CommentPopup: React.FC<CommentPopupProps> = ({
 
   const handleReactToComment = (commentId: string, emoji: string) => {
     // This would be implemented to add reactions to specific comments
-    console.log('React to comment:', { commentId, emoji });
   };
 
   const formatTimestamp = (timestamp: string) => {

@@ -37,9 +37,7 @@ const Prayer = () => {
 
   const loadPrayerRequests = async () => {
     try {
-      console.log('Loading prayer requests...');
       const data = await prayerAPI.getAll();
-      console.log('Prayer requests loaded:', data);
       setRequests(data as PrayerRequest[]);
     } catch (error) {
       console.error('Error loading prayer requests:', error);

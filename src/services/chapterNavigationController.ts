@@ -55,7 +55,6 @@ export class ChapterNavigationController {
     this.options = { ...this.defaultOptions, ...options };
     this.displayPreferences = { ...this.defaultPreferences, ...preferences };
     
-    console.log('ChapterNavigationController: Initialized with options:', this.options);
   }
 
   /**
@@ -63,7 +62,6 @@ export class ChapterNavigationController {
    */
   async initialize(content: ClassifiedEpubContent, documentId?: string, userId?: string): Promise<void> {
     try {
-      console.log(`ChapterNavigationController: Initializing with ${content.totalRealChapters} real chapters`);
       
       this.currentContent = content;
       
@@ -102,7 +100,6 @@ export class ChapterNavigationController {
         navigationState: this.navigationState
       });
       
-      console.log('ChapterNavigationController: Initialization complete');
     } catch (error) {
       console.error('ChapterNavigationController: Initialization failed:', error);
       this.emitEvent('navigation-error', { error: error.message });
@@ -126,7 +123,6 @@ export class ChapterNavigationController {
         return false;
       }
 
-      console.log(`ChapterNavigationController: Navigating to chapter: ${chapter.title}`);
       
       this.currentChapterId = chapterId;
       this.navigationState = ChapterUtils.generateNavigationState(
@@ -167,7 +163,6 @@ export class ChapterNavigationController {
    */
   async navigateToNext(): Promise<boolean> {
     if (!this.navigationState?.hasNext) {
-      console.log('ChapterNavigationController: No next chapter available');
       return false;
     }
 
@@ -176,7 +171,6 @@ export class ChapterNavigationController {
       return false;
     }
 
-    console.log(`ChapterNavigationController: Navigating to next chapter: ${nextChapter.title}`);
     return await this.navigateToChapter(nextChapter.id);
   }
 
@@ -185,7 +179,6 @@ export class ChapterNavigationController {
    */
   async navigateToPrevious(): Promise<boolean> {
     if (!this.navigationState?.hasPrevious) {
-      console.log('ChapterNavigationController: No previous chapter available');
       return false;
     }
 
@@ -194,7 +187,6 @@ export class ChapterNavigationController {
       return false;
     }
 
-    console.log(`ChapterNavigationController: Navigating to previous chapter: ${previousChapter.title}`);
     return await this.navigateToChapter(previousChapter.id);
   }
 
@@ -322,7 +314,6 @@ export class ChapterNavigationController {
 
     if (!this.readingSession.chaptersCompleted.includes(this.currentChapterId)) {
       this.readingSession.chaptersCompleted.push(this.currentChapterId);
-      console.log(`ChapterNavigationController: Marked chapter as completed: ${this.currentChapterId}`);
       
       this.emitEvent('progress-updated', {
         chaptersCompleted: this.readingSession.chaptersCompleted.length,
@@ -336,7 +327,6 @@ export class ChapterNavigationController {
    */
   updateDisplayPreferences(preferences: Partial<ChapterDisplayPreferences>): void {
     this.displayPreferences = { ...this.displayPreferences, ...preferences };
-    console.log('ChapterNavigationController: Updated display preferences:', this.displayPreferences);
     
     // Refresh navigation state with new preferences
     if (this.currentChapterId) {
@@ -386,14 +376,12 @@ export class ChapterNavigationController {
     if (this.readingSession?.currentChapter) {
       const lastChapter = ChapterUtils.findChapterById(visibleChapters, this.readingSession.currentChapter);
       if (lastChapter) {
-        console.log('ChapterNavigationController: Resuming from last read chapter:', lastChapter.title);
         return lastChapter;
       }
     }
 
     // Otherwise, start with the first real chapter
     const firstChapter = visibleChapters[0];
-    console.log('ChapterNavigationController: Starting with first chapter:', firstChapter.title);
     return firstChapter;
   }
 
@@ -415,7 +403,6 @@ export class ChapterNavigationController {
           ...parsedSession,
           lastReadAt: new Date(parsedSession.lastReadAt)
         };
-        console.log('ChapterNavigationController: Loaded existing session:', this.readingSession);
       }
     } catch (error) {
       console.warn('ChapterNavigationController: Failed to load session:', error);
@@ -431,7 +418,6 @@ export class ChapterNavigationController {
     try {
       const sessionKey = `reading-session-${this.readingSession.documentId}-${this.readingSession.userId}`;
       localStorage.setItem(sessionKey, JSON.stringify(this.readingSession));
-      console.log('ChapterNavigationController: Session saved');
     } catch (error) {
       console.warn('ChapterNavigationController: Failed to save session:', error);
     }
@@ -487,7 +473,6 @@ export class ChapterNavigationController {
     // Clear event listeners
     this.eventListeners.clear();
 
-    console.log('ChapterNavigationController: Disposed');
   }
 }
 
