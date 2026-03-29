@@ -1,0 +1,9 @@
+node_modules
+dist
+dist-ssr
+.git
+backend/venv
+backend/bibly_backend/db.sqlite3
+*.sqlite3
+.env.local
+.DS_Store
