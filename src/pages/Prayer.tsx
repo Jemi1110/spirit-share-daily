@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -172,18 +171,18 @@ const Prayer = () => {
 
         <div className="space-y-4">
           {requests.length === 0 ? (
-            <Card>
-              <CardContent className="text-center py-8">
+            <div className="bible-glass-card">
+              <div className="p-6 text-center">
                 <p className="text-muted-foreground">No prayer requests yet. Share the first one!</p>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           ) : (
             requests.map((request) => (
-              <Card key={request.id} className="border-l-4 border-l-prayer">
-                <CardHeader>
+              <div key={request.id} className="bible-glass-card border-l-4 border-l-prayer">
+                <div className="p-6 pb-0">
                   <div className="flex justify-between items-start">
                     <div>
-                      <CardTitle className="text-lg mb-1">{request.title}</CardTitle>
+                      <h3 className="text-lg font-semibold mb-1">{request.title}</h3>
                       <p className="text-sm text-muted-foreground">
                         by {request.user.username} • {formatDate(request.created_at)}
                       </p>
@@ -202,25 +201,25 @@ const Prayer = () => {
                       </Button>
                     </div>
                   </div>
-                </CardHeader>
-                <CardContent>
+                </div>
+                <div className="p-6 pt-2">
                   <p className="text-foreground">{request.description}</p>
-                </CardContent>
-                <CardFooter className="flex justify-between">
+                </div>
+                <div className="px-6 pb-6 flex justify-between">
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Users className="h-4 w-4" />
                     <span className="text-sm">{request.prayer_count} people prayed</span>
                   </div>
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     className="gap-2 border-prayer text-prayer hover:bg-prayer hover:text-prayer-foreground"
                     onClick={() => handlePray(request.id)}
                   >
                     <Heart className="h-4 w-4" />
                     I Prayed
                   </Button>
-                </CardFooter>
-              </Card>
+                </div>
+              </div>
             ))
           )}
         </div>

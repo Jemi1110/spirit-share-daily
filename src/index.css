@@ -1,9 +1,9 @@
+/* Import Glose-inspired utilities */
+@import './styles/glose-utilities.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* Import Glose-inspired utilities */
-@import './styles/glose-utilities.css';
 
 /* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
 All colors MUST be HSL.

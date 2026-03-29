@@ -7,7 +7,6 @@ services:
       - "8000:8000"
     volumes:
       - ./backend/bibly_backend:/app
-      - backend-data:/app/db.sqlite3
     environment:
       - DJANGO_SECRET_KEY=change-me-in-production
       - DJANGO_DEBUG=true
@@ -33,6 +32,3 @@ services:
       - VITE_WS_URL=ws://localhost:8000
     depends_on:
       - backend
-
-volumes:
-  backend-data:

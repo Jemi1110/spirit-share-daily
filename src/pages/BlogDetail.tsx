@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Edit2, Trash2, Save, X, PenTool, Calendar, User, Clock } from "lucide-react";
@@ -143,19 +142,19 @@ const BlogDetail = () => {
     return (
       <Layout>
         <div className="max-w-4xl mx-auto space-y-6">
-          <Card>
-            <CardContent className="text-center py-8">
+          <div className="bible-glass-card">
+            <div className="p-6 text-center">
               <p className="text-muted-foreground">Article not found</p>
-              <Button 
-                onClick={() => navigate('/blog')} 
+              <Button
+                onClick={() => navigate('/blog')}
                 className="mt-4"
                 variant="outline"
               >
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back to Blog
               </Button>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
       </Layout>
     );
@@ -209,8 +208,8 @@ const BlogDetail = () => {
         </div>
 
         {/* Article Content */}
-        <Card>
-          <CardHeader>
+        <div className="bible-glass-card">
+          <div className="p-6 pb-0">
             <div className="space-y-4">
               {editing ? (
                 <input
@@ -221,12 +220,12 @@ const BlogDetail = () => {
                   placeholder="Article title..."
                 />
               ) : (
-                <CardTitle className="text-3xl font-bold text-spiritual flex items-center gap-3">
+                <h3 className="text-3xl font-bold text-spiritual flex items-center gap-3">
                   <PenTool className="h-8 w-8" />
                   {article.title}
-                </CardTitle>
+                </h3>
               )}
-              
+
               <div className="flex items-center gap-4 text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
                   <User className="h-4 w-4" />
@@ -247,9 +246,9 @@ const BlogDetail = () => {
                 )}
               </div>
             </div>
-          </CardHeader>
-          
-          <CardContent>
+          </div>
+
+          <div className="p-6 pt-2">
             {editing ? (
               <Textarea
                 value={editForm.content}
@@ -264,13 +263,13 @@ const BlogDetail = () => {
                 </div>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {/* Related Actions */}
         {!editing && (
-          <Card className="bg-spiritual-light">
-            <CardContent className="pt-6">
+          <div className="bible-glass-card">
+            <div className="p-6">
               <h4 className="font-semibold mb-4">Engage with this Article</h4>
               <p className="text-sm text-muted-foreground mb-4">
                 What are your thoughts on this article? Join the conversation.
@@ -286,8 +285,8 @@ const BlogDetail = () => {
                   Save for Later (Coming Soon)
                 </Button>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
       </div>
     </Layout>

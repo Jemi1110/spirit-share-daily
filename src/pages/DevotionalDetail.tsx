@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Edit2, Trash2, Save, X, BookOpen, Calendar, User } from "lucide-react";
@@ -136,19 +135,19 @@ const DevotionalDetail = () => {
     return (
       <Layout>
         <div className="max-w-4xl mx-auto space-y-6">
-          <Card>
-            <CardContent className="text-center py-8">
+          <div className="bible-glass-card">
+            <div className="p-6 text-center">
               <p className="text-muted-foreground">Devotional not found</p>
-              <Button 
-                onClick={() => navigate('/devotionals')} 
+              <Button
+                onClick={() => navigate('/devotionals')}
                 className="mt-4"
                 variant="outline"
               >
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back to Devotionals
               </Button>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
       </Layout>
     );
@@ -202,8 +201,8 @@ const DevotionalDetail = () => {
         </div>
 
         {/* Devotional Content */}
-        <Card className="border-l-4 border-l-devotional">
-          <CardHeader>
+        <div className="bible-glass-card border-l-4 border-l-devotional">
+          <div className="p-6 pb-0">
             <div className="space-y-4">
               {editing ? (
                 <input
@@ -214,12 +213,12 @@ const DevotionalDetail = () => {
                   placeholder="Devotional title..."
                 />
               ) : (
-                <CardTitle className="text-3xl font-bold text-devotional flex items-center gap-3">
+                <h3 className="text-3xl font-bold text-devotional flex items-center gap-3">
                   <BookOpen className="h-8 w-8" />
                   {devotional.title}
-                </CardTitle>
+                </h3>
               )}
-              
+
               <div className="flex items-center gap-4 text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
                   <User className="h-4 w-4" />
@@ -236,9 +235,9 @@ const DevotionalDetail = () => {
                 )}
               </div>
             </div>
-          </CardHeader>
-          
-          <CardContent>
+          </div>
+
+          <div className="p-6 pt-2">
             {editing ? (
               <Textarea
                 value={editForm.content}
@@ -253,13 +252,13 @@ const DevotionalDetail = () => {
                 </div>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {/* Related Actions */}
         {!editing && (
-          <Card className="bg-spiritual-light">
-            <CardContent className="pt-6">
+          <div className="bible-glass-card">
+            <div className="p-6">
               <h4 className="font-semibold mb-4">Share Your Thoughts</h4>
               <p className="text-sm text-muted-foreground mb-4">
                 How did this devotional speak to you? Share your reflections with the community.
@@ -272,8 +271,8 @@ const DevotionalDetail = () => {
                   Share Devotional (Coming Soon)
                 </Button>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
       </div>
     </Layout>

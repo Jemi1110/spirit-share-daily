@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -145,8 +144,8 @@ const Profile = () => {
   return (
     <Layout>
       <div className="max-w-4xl mx-auto space-y-6">
-        <Card>
-          <CardHeader>
+        <div className="bible-glass-card">
+          <div className="p-6 pb-0">
             <div className="flex items-start justify-between">
               <div className="flex gap-4">
                 <Avatar className="h-20 w-20">
@@ -214,8 +213,8 @@ const Profile = () => {
                 </Button>
               </div>
             </div>
-          </CardHeader>
-          <CardContent>
+          </div>
+          <div className="p-6 pt-4">
             <div className="flex gap-8">
               <div className="text-center">
                 <p className="text-2xl font-bold text-spiritual">{devotionals.length}</p>
@@ -230,8 +229,8 @@ const Profile = () => {
                 <p className="text-sm text-muted-foreground">Posts</p>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         <Tabs defaultValue="devotionals" className="w-full">
           <TabsList className="grid w-full grid-cols-3">
@@ -242,81 +241,81 @@ const Profile = () => {
           
           <TabsContent value="devotionals" className="space-y-4 mt-4">
             {devotionals.length === 0 ? (
-              <Card>
-                <CardContent className="text-center py-8">
+              <div className="bible-glass-card">
+                <div className="p-6 text-center">
                   <p className="text-muted-foreground">No devotionals yet</p>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             ) : (
               devotionals.map((devotional) => (
-                <Card key={devotional.id}>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg">
+                <div key={devotional.id} className="bible-glass-card">
+                  <div className="p-6 pb-0">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
                       <BookOpen className="h-5 w-5 text-devotional" />
                       {devotional.title}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
+                    </h3>
+                  </div>
+                  <div className="p-6 pt-2">
                     <p className="text-muted-foreground">{devotional.content.substring(0, 150)}...</p>
                     <p className="text-sm text-muted-foreground mt-2">{formatDate(devotional.created_at)}</p>
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               ))
             )}
           </TabsContent>
           
           <TabsContent value="prayers" className="space-y-4 mt-4">
             {prayers.length === 0 ? (
-              <Card>
-                <CardContent className="text-center py-8">
+              <div className="bible-glass-card">
+                <div className="p-6 text-center">
                   <p className="text-muted-foreground">No prayer requests yet</p>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             ) : (
               prayers.map((prayer) => (
-                <Card key={prayer.id}>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg">
+                <div key={prayer.id} className="bible-glass-card">
+                  <div className="p-6 pb-0">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
                       <Heart className="h-5 w-5 text-prayer" />
                       {prayer.title}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
+                    </h3>
+                  </div>
+                  <div className="p-6 pt-2">
                     <p className="text-muted-foreground">{prayer.description}</p>
                     <p className="text-sm text-muted-foreground mt-2">
                       {prayer.prayer_count} people prayed • {formatDate(prayer.created_at)}
                     </p>
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               ))
             )}
           </TabsContent>
           
           <TabsContent value="posts" className="space-y-4 mt-4">
             {posts.length === 0 ? (
-              <Card>
-                <CardContent className="text-center py-8">
+              <div className="bible-glass-card">
+                <div className="p-6 text-center">
                   <p className="text-muted-foreground">No posts yet</p>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             ) : (
               posts.map((post) => (
-                <Card key={post.id}>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg">
+                <div key={post.id} className="bible-glass-card">
+                  <div className="p-6 pb-0">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
                       <PenTool className="h-5 w-5 text-spiritual" />
                       Post
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
+                    </h3>
+                  </div>
+                  <div className="p-6 pt-2">
                     <p className="text-muted-foreground whitespace-pre-wrap">{post.content}</p>
                     <div className="flex gap-4 mt-2 text-sm text-muted-foreground">
                       <span>{post.likes_count} likes</span>
                       <span>{post.comments_count} comments</span>
                       <span>{formatDate(post.created_at)}</span>
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               ))
             )}
           </TabsContent>

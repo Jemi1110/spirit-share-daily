@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -187,17 +186,17 @@ const Blog = () => {
 
         <div className="space-y-6">
           {articles.length === 0 ? (
-            <Card>
-              <CardContent className="text-center py-8">
+            <div className="bible-glass-card">
+              <div className="p-6 text-center">
                 <p className="text-muted-foreground">No articles yet. Write your first one!</p>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           ) : (
             articles.map((article) => (
-              <Card key={article.id} className="hover:shadow-lg transition-shadow">
-                <CardHeader>
+              <div key={article.id} className="bible-glass-card">
+                <div className="p-6 pb-0">
                   <div className="flex justify-between items-start">
-                    <CardTitle className="flex items-start gap-2 text-xl">
+                    <h3 className="text-xl font-semibold flex items-start gap-2">
                       <PenTool className="h-5 w-5 text-spiritual mt-1" />
                       {editingId === article.id ? (
                         <Input
@@ -208,7 +207,7 @@ const Blog = () => {
                       ) : (
                         <span>{article.title}</span>
                       )}
-                    </CardTitle>
+                    </h3>
                     <div className="flex gap-2">
                       {editingId === article.id ? (
                         <>
@@ -256,8 +255,8 @@ const Blog = () => {
                       )}
                     </div>
                   </div>
-                </CardHeader>
-                <CardContent>
+                </div>
+                <div className="p-6 pt-2">
                   {editingId === article.id ? (
                     <Textarea
                       value={editForm.content}
@@ -267,8 +266,8 @@ const Blog = () => {
                   ) : (
                     <>
                       <p className="text-muted-foreground mb-4">
-                        {article.content.length > 200 
-                          ? article.content.substring(0, 200) + '...' 
+                        {article.content.length > 200
+                          ? article.content.substring(0, 200) + '...'
                           : article.content}
                       </p>
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
@@ -280,19 +279,19 @@ const Blog = () => {
                       </div>
                     </>
                   )}
-                </CardContent>
+                </div>
                 {editingId !== article.id && (
-                  <CardFooter>
-                    <Button 
-                      variant="ghost" 
+                  <div className="px-6 pb-6">
+                    <Button
+                      variant="ghost"
                       className="text-spiritual hover:text-spiritual/90"
                       onClick={() => navigate(`/blog/${article.id}`)}
                     >
                       Read More →
                     </Button>
-                  </CardFooter>
+                  </div>
                 )}
-              </Card>
+              </div>
             ))
           )}
         </div>

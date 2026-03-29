@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -186,10 +185,10 @@ const Devotionals = () => {
             </div>
           ) : (
             devotionals.map((devotional) => (
-              <Card key={devotional.id} className="hover:shadow-lg transition-shadow border-l-4 border-l-devotional">
-                <CardHeader>
+              <div key={devotional.id} className="bible-glass-card border-l-4 border-l-devotional">
+                <div className="p-6 pb-0">
                   <div className="flex justify-between items-start">
-                    <CardTitle className="flex items-start gap-2">
+                    <h3 className="text-lg font-semibold flex items-start gap-2">
                       <BookOpen className="h-5 w-5 text-devotional mt-1" />
                       {editingId === devotional.id ? (
                         <Input
@@ -200,7 +199,7 @@ const Devotionals = () => {
                       ) : (
                         <span>{devotional.title}</span>
                       )}
-                    </CardTitle>
+                    </h3>
                     <div className="flex gap-2">
                       {editingId === devotional.id ? (
                         <>
@@ -248,8 +247,8 @@ const Devotionals = () => {
                       )}
                     </div>
                   </div>
-                </CardHeader>
-                <CardContent>
+                </div>
+                <div className="p-6 pt-2">
                   {editingId === devotional.id ? (
                     <Textarea
                       value={editForm.content}
@@ -257,13 +256,13 @@ const Devotionals = () => {
                       className="min-h-[100px]"
                     />
                   ) : (
-                    <div 
+                    <div
                       className="cursor-pointer"
                       onClick={() => navigate(`/devotionals/${devotional.id}`)}
                     >
                       <p className="text-muted-foreground mb-3 hover:text-foreground transition-colors">
-                        {devotional.content.length > 150 
-                          ? devotional.content.substring(0, 150) + '...' 
+                        {devotional.content.length > 150
+                          ? devotional.content.substring(0, 150) + '...'
                           : devotional.content}
                       </p>
                       <p className="text-sm text-spiritual hover:underline">
@@ -272,11 +271,11 @@ const Devotionals = () => {
                     </div>
                   )}
                   <p className="text-sm font-medium text-spiritual mt-3">By {devotional.user.username}</p>
-                </CardContent>
-                <CardFooter>
+                </div>
+                <div className="px-6 pb-6">
                   <p className="text-xs text-muted-foreground">{formatDate(devotional.created_at)}</p>
-                </CardFooter>
-              </Card>
+                </div>
+              </div>
             ))
           )}
         </div>
