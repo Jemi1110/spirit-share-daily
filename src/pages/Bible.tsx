@@ -1,11 +1,9 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Search, Highlighter, MessageSquare, BookOpen, ChevronLeft, ChevronRight, Palette, Tag, Heart, Star, Upload, FileText, Users, Share2, Download, Eye, Trash2, Library } from "lucide-react";
+import { Search, Highlighter, MessageSquare, BookOpen, ChevronLeft, ChevronRight, Palette, Heart, Star, Upload, FileText, Users, Share2, Trash2, Library } from "lucide-react";
 import { externalBibleAPI, POPULAR_BIBLE_IDS, formatVerseReference } from "@/services/bibleApi";
 import { documentAPI } from "@/services/api";
 import { toast } from "sonner";
@@ -68,6 +66,7 @@ const HIGHLIGHT_CATEGORIES = [
 ];
 
 const Bible = () => {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedVersion, setSelectedVersion] = useState(POPULAR_BIBLE_IDS.ESV);
   const [selectedBook, setSelectedBook] = useState("");
@@ -482,6 +481,38 @@ const Bible = () => {
     }
   };
 
+  const computeUserBibleNavigation = (bookId: string, chapterId: string) => {
+    const bookIndex = availableBooks.findIndex(b => b.id === bookId);
+    if (bookIndex === -1) return { next: null, previous: null };
+
+    const book = availableBooks[bookIndex];
+    const chapterIndex = book.chapters.findIndex(c => c.id === chapterId);
+    if (chapterIndex === -1) return { next: null, previous: null };
+
+    let previous: { id: string; number: string } | null = null;
+    let next: { id: string; number: string } | null = null;
+
+    if (chapterIndex > 0) {
+      const prevCh = book.chapters[chapterIndex - 1];
+      previous = { id: prevCh.id, number: prevCh.number };
+    } else if (bookIndex > 0) {
+      const prevBook = availableBooks[bookIndex - 1];
+      const lastCh = prevBook.chapters[prevBook.chapters.length - 1];
+      if (lastCh) previous = { id: lastCh.id, number: lastCh.number };
+    }
+
+    if (chapterIndex < book.chapters.length - 1) {
+      const nextCh = book.chapters[chapterIndex + 1];
+      next = { id: nextCh.id, number: nextCh.number };
+    } else if (bookIndex < availableBooks.length - 1) {
+      const nextBook = availableBooks[bookIndex + 1];
+      const firstCh = nextBook.chapters[0];
+      if (firstCh) next = { id: firstCh.id, number: firstCh.number };
+    }
+
+    return { next, previous };
+  };
+
   const loadChapter = async () => {
     if (!selectedVersion || !selectedChapter) return;
 
@@ -514,10 +545,9 @@ const Bible = () => {
               reference: chapter.reference,
               content: content,
               verseCount: Object.keys(verses).length,
-              next: null, // TODO: Calculate next chapter
-              previous: null // TODO: Calculate previous chapter
+              ...computeUserBibleNavigation(selectedBook, selectedChapter),
             };
-            
+
             setCurrentChapter(realChapter);
             return;
           } else {
@@ -580,8 +610,7 @@ const Bible = () => {
             reference: chapter.reference,
             content: content,
             verseCount: Object.keys(verses).length,
-            next: null, // TODO: Calculate next chapter
-            previous: null // TODO: Calculate previous chapter
+            ...computeUserBibleNavigation(bookId, chapterId),
           };
           
           setCurrentChapter(realChapter);
@@ -872,7 +901,7 @@ const Bible = () => {
       // Add to local state
       setUserDocuments(prev => [...prev, uploadedDocument]);
       
-      // If it's a Bible, add to Bible versions
+      // If it's a Bible, add to versions and auto-open
       if (uploadedDocument.is_bible) {
         const bibleVersion = {
           id: `user-${uploadedDocument.id}`,
@@ -883,9 +912,14 @@ const Bible = () => {
           },
           parsedContent: uploadedDocument.parsed_content
         };
-        
+
         setBibleVersions(prev => [bibleVersion, ...prev]);
-        toast.success(`${file.name} añadido como versión bíblica personal`);
+        toast.success(`${file.name} añadido — abriendo...`);
+        await handleVersionChange(`user-${uploadedDocument.id}`);
+        setViewMode('chapter');
+      } else if (uploadedDocument.file_type === 'epub' || uploadedDocument.file_type === 'pdf') {
+        toast.success(`${file.name} subido — abriendo lector...`);
+        navigate(`/collaborative-reader/${uploadedDocument.id}`);
       } else {
         toast.success(`${file.name} subido exitosamente`);
       }
@@ -991,11 +1025,20 @@ const Bible = () => {
   const navigateChapter = (direction: 'prev' | 'next') => {
     if (!currentChapter) return;
 
-    if (direction === 'next' && currentChapter.next) {
-      setSelectedChapter(currentChapter.next.id);
-    } else if (direction === 'prev' && currentChapter.previous) {
-      setSelectedChapter(currentChapter.previous.id);
+    const target = direction === 'next' ? currentChapter.next : currentChapter.previous;
+    if (!target) return;
+
+    // For user Bibles, handle cross-book navigation
+    if (selectedVersion.startsWith('user-')) {
+      const currentBook = availableBooks.find(b => b.id === selectedBook);
+      const isInCurrentBook = currentBook?.chapters.some(c => c.id === target.id);
+      if (!isInCurrentBook) {
+        const targetBook = availableBooks.find(b => b.chapters.some(c => c.id === target.id));
+        if (targetBook) setSelectedBook(targetBook.id);
+      }
     }
+
+    setSelectedChapter(target.id);
   };
 
   const handleSearch = async () => {
@@ -1042,8 +1085,11 @@ const Bible = () => {
   if (loading) {
     return (
       <Layout>
-        <div className="max-w-4xl mx-auto space-y-6">
-          <div className="text-center">Loading Bible...</div>
+        <div className="max-w-4xl space-y-6">
+          <div className="bible-glass-card p-12 text-center">
+            <BookOpen className="h-12 w-12 text-orange-400 mx-auto mb-4 animate-pulse" />
+            <p className="text-muted-foreground">Cargando Biblia...</p>
+          </div>
         </div>
       </Layout>
     );
@@ -1051,872 +1097,578 @@ const Bible = () => {
 
   return (
     <Layout>
-      <div className="max-w-4xl mx-auto space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BookOpen className="h-5 w-5 text-spiritual" />
-              Bible Reader - Enhanced Navigation
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex gap-4">
-              <div className="flex-1">
-                <Input
-                  placeholder="Search verses..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                  className="w-full"
-                />
-              </div>
-              <Button
+      <div className="max-w-4xl space-y-6">
+        {/* Controls Bar */}
+        <div className="bible-glass-card p-4 space-y-4">
+          {/* Search + View Toggles */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex-1 flex gap-2">
+              <Input
+                placeholder="Buscar versículos..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                className="bg-background/50 border-white/10"
+              />
+              <button
                 onClick={handleSearch}
                 disabled={searching}
-                className="bg-spiritual hover:bg-spiritual/90"
+                className="bg-orange-500/20 hover:bg-orange-500/30 backdrop-blur-sm rounded-full px-4 py-2 text-orange-400 transition-colors"
               >
                 <Search className="h-4 w-4" />
-              </Button>
+              </button>
               {searchQuery && (
-                <Button variant="outline" onClick={clearSearch}>
-                  Clear
-                </Button>
+                <button
+                  onClick={clearSearch}
+                  className="bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-full px-4 py-2 text-muted-foreground transition-colors text-sm"
+                >
+                  Limpiar
+                </button>
               )}
-              <Button
-                variant={viewMode === 'highlights' ? 'default' : 'outline'}
-                className="flex items-center gap-2"
+            </div>
+            <div className="flex gap-2">
+              <button
                 onClick={() => setViewMode('highlights')}
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                  viewMode === 'highlights'
+                    ? 'bg-orange-500/20 text-orange-400'
+                    : 'bg-white/5 text-muted-foreground hover:bg-white/10'
+                }`}
               >
                 <Highlighter className="h-4 w-4" />
-                Resaltados ({highlights.length})
-              </Button>
-              <Button
-                variant={viewMode === 'library' ? 'default' : 'outline'}
-                className="flex items-center gap-2"
+                <span className="hidden sm:inline">Resaltados</span>
+                <span className="text-xs opacity-70">({highlights.length})</span>
+              </button>
+              <button
                 onClick={() => setViewMode('library')}
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                  viewMode === 'library'
+                    ? 'bg-purple-500/20 text-purple-400'
+                    : 'bg-white/5 text-muted-foreground hover:bg-white/10'
+                }`}
               >
                 <Library className="h-4 w-4" />
-                Mi Biblioteca ({userDocuments.length})
-              </Button>
+                <span className="hidden sm:inline">Biblioteca</span>
+                <span className="text-xs opacity-70">({userDocuments.length})</span>
+              </button>
             </div>
+          </div>
 
-            {viewMode === 'chapter' && (
-              <div className="flex gap-4 items-center flex-wrap">
-                <Select value={selectedVersion} onValueChange={handleVersionChange}>
-                  <SelectTrigger className="w-[200px]">
-                    <SelectValue placeholder="Select Version" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(() => {
-                      const versionsByLanguage = bibleVersions?.reduce((acc, version) => {
-                        const language = version.language.name;
-                        if (!acc[language]) {
-                          acc[language] = [];
-                        }
-                        acc[language].push(version);
-                        return acc;
-                      }, {} as Record<string, BibleVersion[]>) || {};
+          {/* Bible Selectors */}
+          {viewMode === 'chapter' && (
+            <div className="flex gap-3 items-center flex-wrap">
+              <Select value={selectedVersion} onValueChange={handleVersionChange}>
+                <SelectTrigger className="w-[200px] bg-background/50 border-white/10">
+                  <SelectValue placeholder="Versión" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(() => {
+                    const versionsByLanguage = bibleVersions?.reduce((acc, version) => {
+                      const language = version.language.name;
+                      if (!acc[language]) acc[language] = [];
+                      acc[language].push(version);
+                      return acc;
+                    }, {} as Record<string, BibleVersion[]>) || {};
 
-                      const sortedLanguages = Object.keys(versionsByLanguage).sort((a, b) => {
-                        if (a === 'Uploaded Bibles') return -1;
-                        if (b === 'Uploaded Bibles') return 1;
-                        if (a === 'Spanish') return -1;
-                        if (b === 'Spanish') return 1;
-                        if (a === 'English') return -1;
-                        if (b === 'English') return 1;
-                        return a.localeCompare(b);
-                      });
+                    const sortedLanguages = Object.keys(versionsByLanguage).sort((a, b) => {
+                      if (a === 'Uploaded Bibles') return -1;
+                      if (b === 'Uploaded Bibles') return 1;
+                      if (a === 'Spanish') return -1;
+                      if (b === 'Spanish') return 1;
+                      if (a === 'English') return -1;
+                      if (b === 'English') return 1;
+                      return a.localeCompare(b);
+                    });
 
-                      return sortedLanguages.map(language => (
-                        <div key={language}>
-                          <div className={`px-2 py-1 text-xs font-semibold sticky top-0 ${
-                            language === 'Uploaded Bibles' 
-                              ? 'text-spiritual bg-spiritual/10 border-b border-spiritual/20' 
-                              : 'text-muted-foreground bg-muted/50'
-                          }`}>
-                            {language === 'Uploaded Bibles' ? '📚 UPLOADED BIBLES' : language} ({versionsByLanguage[language].length})
-                          </div>
-                          {versionsByLanguage[language].map((version) => (
-                            <SelectItem key={version.id} value={version.id}>
-                              {language === 'Uploaded Bibles' ? (
-                                <div className="flex items-center gap-2">
-                                  <span className="text-spiritual">📖</span>
-                                  <span>{version.name}</span>
-                                  <span className="text-xs text-muted-foreground">({version.abbreviation})</span>
-                                </div>
-                              ) : (
-                                `${version.name} (${version.abbreviation})`
-                              )}
-                            </SelectItem>
-                          ))}
+                    return sortedLanguages.map(language => (
+                      <div key={language}>
+                        <div className={`px-2 py-1 text-xs font-semibold sticky top-0 ${
+                          language === 'Uploaded Bibles'
+                            ? 'text-orange-400 bg-orange-500/10 border-b border-orange-500/20'
+                            : 'text-muted-foreground bg-muted/50'
+                        }`}>
+                          {language} ({versionsByLanguage[language].length})
                         </div>
-                      ));
-                    })()}
-                  </SelectContent>
-                </Select>
-
-                <Select value={selectedBook} onValueChange={handleBookChange}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Select Book" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableBooks?.map((book) => (
-                      <SelectItem key={book.id} value={book.id}>
-                        {book.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {selectedBook && (
-                  <Select value={selectedChapter} onValueChange={handleChapterChange}>
-                    <SelectTrigger className="w-[120px]">
-                      <SelectValue placeholder="Chapter" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableBooks
-                        ?.find(b => b.id === selectedBook)
-                        ?.chapters?.map((chapter) => (
-                          <SelectItem key={chapter.id} value={chapter.id}>
-                            Chapter {chapter.number}
+                        {versionsByLanguage[language].map((version) => (
+                          <SelectItem key={version.id} value={version.id}>
+                            {version.name} ({version.abbreviation})
                           </SelectItem>
                         ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-            )}
+                      </div>
+                    ));
+                  })()}
+                </SelectContent>
+              </Select>
 
-            {viewMode === 'search' && searchQuery && (
-              <div className="text-sm text-muted-foreground">
-                {searchResults?.length > 0
-                  ? `Found ${searchResults?.length} verses matching "${searchQuery}"`
-                  : !searching
-                    ? `No verses found matching "${searchQuery}"`
-                    : 'Searching...'
-                }
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              <Select value={selectedBook} onValueChange={handleBookChange}>
+                <SelectTrigger className="w-[180px] bg-background/50 border-white/10">
+                  <SelectValue placeholder="Libro" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableBooks?.map((book) => (
+                    <SelectItem key={book.id} value={book.id}>
+                      {book.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
+              {selectedBook && (
+                <Select value={selectedChapter} onValueChange={handleChapterChange}>
+                  <SelectTrigger className="w-[120px] bg-background/50 border-white/10">
+                    <SelectValue placeholder="Cap." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableBooks
+                      ?.find(b => b.id === selectedBook)
+                      ?.chapters?.map((chapter) => (
+                        <SelectItem key={chapter.id} value={chapter.id}>
+                          Cap. {chapter.number}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+          )}
+
+          {viewMode === 'search' && searchQuery && (
+            <div className="text-sm text-muted-foreground">
+              {searchResults?.length > 0
+                ? `${searchResults.length} versículos encontrados para "${searchQuery}"`
+                : !searching ? `Sin resultados para "${searchQuery}"` : 'Buscando...'}
+            </div>
+          )}
+        </div>
+
+        {/* Chapter Navigation */}
         {viewMode === 'chapter' && currentChapter && (
-          <Card className="bg-spiritual-light">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <Button
-                  variant="ghost"
-                  onClick={() => navigateChapter('prev')}
-                  disabled={!currentChapter.previous}
-                  className="flex items-center gap-2"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                  Previous
-                </Button>
-
-                <div className="text-center">
-                  <h2 className="text-xl font-semibold">
-                    {getCurrentBookName()} {getCurrentChapterNumber()}
-                  </h2>
-                </div>
-
-                <Button
-                  variant="ghost"
-                  onClick={() => navigateChapter('next')}
-                  disabled={!currentChapter.next}
-                  className="flex items-center gap-2"
-                >
-                  Next
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
+          <div className="bible-card-sunset relative overflow-hidden">
+            <div className="relative z-10 flex items-center justify-between">
+              <button
+                onClick={() => navigateChapter('prev')}
+                disabled={!currentChapter.previous}
+                className="bg-white/20 backdrop-blur-sm rounded-full p-3 text-white disabled:opacity-30 transition-opacity"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <div className="text-center">
+                <p className="text-white/70 text-sm">Leyendo</p>
+                <h2 className="text-white text-xl font-bold">
+                  {getCurrentBookName()} {getCurrentChapterNumber()}
+                </h2>
               </div>
-            </CardContent>
-          </Card>
+              <button
+                onClick={() => navigateChapter('next')}
+                disabled={!currentChapter.next}
+                className="bg-white/20 backdrop-blur-sm rounded-full p-3 text-white disabled:opacity-30 transition-opacity"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="absolute inset-0 opacity-20">
+              <div className="absolute bottom-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mb-16"></div>
+            </div>
+          </div>
         )}
 
-        <div className="space-y-4">
+        {/* Main Content */}
+        <div className="space-y-6">
           {viewMode === 'library' ? (
-            <div className="space-y-6">
-              {/* Upload Section */}
-              <Card className="border-l-4 border-l-spiritual">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Library className="h-5 w-5 text-spiritual" />
-                    Mi Biblioteca Personal
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid md:grid-cols-2 gap-6">
-                    {/* Upload Area */}
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-semibold">Subir Documentos</h3>
-                      <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center hover:border-spiritual/50 transition-colors">
-                        <Upload className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                        <p className="text-sm text-muted-foreground mb-4">
-                          Arrastra archivos aquí o haz clic para seleccionar
-                        </p>
-                        <input
-                          type="file"
-                          accept=".pdf,.epub,.txt,.json,.xml"
-                          onChange={handleFileUpload}
-                          disabled={uploadingFile}
-                          className="hidden"
-                          id="file-upload"
-                        />
-                        <label htmlFor="file-upload">
-                          <Button 
-                            variant="outline" 
-                            disabled={uploadingFile}
-                            className="cursor-pointer"
-                            asChild
-                          >
-                            <span>
-                              {uploadingFile ? 'Subiendo...' : 'Seleccionar Archivos'}
-                            </span>
-                          </Button>
-                        </label>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          Formatos soportados: PDF, EPUB, TXT, JSON, XML (Biblias)
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Quick Actions */}
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-semibold">Acciones Rápidas</h3>
-                      <div className="grid gap-3">
-                        <Button 
-                          variant="outline" 
-                          className="justify-start"
-                          onClick={() => {
-                            // Trigger file upload for Bible creation
-                            document.getElementById('file-upload')?.click();
-                            toast.info('Selecciona un archivo XML o JSON para crear una nueva Biblia');
-                          }}
-                        >
-                          <BookOpen className="h-4 w-4 mr-2" />
-                          Crear Nueva Biblia
-                        </Button>
-                        {/* Collaborative Reading - Only show if user has EPUBs or PDFs */}
-                        {userDocuments.some(doc => doc.file_type === 'epub' || doc.file_type === 'pdf') && (
-                          <Button 
-                            variant="outline" 
-                            className="justify-start bg-spiritual/10 hover:bg-spiritual/20 border-spiritual text-spiritual"
-                            onClick={() => {
-                              const collaborativeDoc = userDocuments.find(doc => doc.file_type === 'epub' || doc.file_type === 'pdf');
-                              if (collaborativeDoc) {
-                                window.open(`/collaborative-reader/${collaborativeDoc.id}`, '_blank');
-                              } else {
-                                toast.info('Sube un EPUB o PDF para crear una sesión colaborativa');
-                              }
-                            }}
-                          >
-                            <Users className="h-4 w-4 mr-2" />
-                            Crear Sesión de Lectura Colaborativa
-                          </Button>
-                        )}
-                        <Button 
-                          variant="outline" 
-                          className="justify-start"
-                          onClick={() => {
-                            // Filter to show only public documents
-                            toast.info('Funcionalidad próximamente: Explorar documentos públicos de la comunidad');
-                          }}
-                        >
-                          <Users className="h-4 w-4 mr-2" />
-                          Explorar Biblioteca Pública
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          className="justify-start"
-                          onClick={() => {
-                            // Show shared documents
-                            const sharedDocs = userDocuments.filter(doc => doc.collaborators && doc.collaborators.length > 0);
-                            if (sharedDocs.length > 0) {
-                              toast.success(`Tienes ${sharedDocs.length} documentos compartidos contigo`);
-                            } else {
-                              toast.info('No tienes documentos compartidos. Pide a alguien que comparta contigo.');
-                            }
-                          }}
-                        >
-                          <Share2 className="h-4 w-4 mr-2" />
-                          Documentos Compartidos Conmigo
-                        </Button>
-                      </div>
-                    </div>
+            <>
+              {/* Upload Hero */}
+              <div className="bible-card-purple relative overflow-hidden">
+                <div className="relative z-10">
+                  <div className="flex items-center gap-3 mb-4">
+                    <Library className="h-6 w-6 text-white" />
+                    <h2 className="text-white text-xl font-bold">Mi Biblioteca</h2>
                   </div>
-                </CardContent>
-              </Card>
+                  <p className="text-white/70 mb-6">Sube tus libros y léelos directamente en Bibly</p>
+                  <div className="flex flex-wrap gap-3">
+                    <input
+                      type="file"
+                      accept=".pdf,.epub,.txt,.json,.xml"
+                      onChange={handleFileUpload}
+                      disabled={uploadingFile}
+                      className="hidden"
+                      id="file-upload"
+                    />
+                    <label htmlFor="file-upload">
+                      <span className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm rounded-full px-6 py-3 text-white font-medium cursor-pointer hover:bg-white/30 transition-colors">
+                        <Upload className="h-5 w-5" />
+                        {uploadingFile ? 'Subiendo...' : 'Subir Archivo'}
+                      </span>
+                    </label>
+                    <button
+                      onClick={() => setViewMode('chapter')}
+                      className="bg-white/10 backdrop-blur-sm rounded-full px-6 py-3 text-white font-medium hover:bg-white/20 transition-colors flex items-center gap-2"
+                    >
+                      <BookOpen className="h-5 w-5" />
+                      Ir a Lectura
+                    </button>
+                  </div>
+                  <p className="text-white/50 text-xs mt-3">PDF, EPUB, TXT, JSON, XML</p>
+                </div>
+                <div className="absolute inset-0 opacity-20">
+                  <div className="absolute bottom-0 right-0 w-40 h-40 bg-white/10 rounded-full -mr-20 -mb-20"></div>
+                </div>
+              </div>
 
               {/* Documents Grid */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <span>Mis Documentos ({userDocuments.length})</span>
-                    <div className="flex gap-2">
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => setViewMode('chapter')}
-                        className="bg-spiritual/10 hover:bg-spiritual/20 border-spiritual text-spiritual"
-                      >
-                        <BookOpen className="h-4 w-4 mr-1" />
-                        Ir a Lectura
-                      </Button>
-                      <Button variant="outline" size="sm">
-                        <Tag className="h-4 w-4 mr-1" />
-                        Filtrar
-                      </Button>
-                    </div>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {userDocuments.length === 0 ? (
-                    <div className="text-center py-12">
-                      <FileText className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-                      <h3 className="text-lg font-semibold mb-2">No tienes documentos aún</h3>
-                      <p className="text-muted-foreground mb-4">
-                        Sube tu primera Biblia, EPUB o PDF para comenzar a estudiar en colaboración.
-                      </p>
-                      <Button 
-                        onClick={() => setViewMode('chapter')}
-                        className="bg-spiritual hover:bg-spiritual/90"
-                      >
-                        <BookOpen className="h-4 w-4 mr-2" />
-                        Ir a Lectura
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {userDocuments.map((doc) => (
-                        <Card key={doc.id} className="hover:shadow-md transition-shadow">
-                          <CardContent className="pt-4">
-                            <div className="flex items-start justify-between mb-3">
-                              <div className="flex items-center gap-2">
-                                {doc.file_type === 'pdf' && <FileText className="h-5 w-5 text-red-500" />}
-                                {doc.file_type === 'epub' && <BookOpen className="h-5 w-5 text-blue-500" />}
-                                {doc.file_type === 'json' && <BookOpen className="h-5 w-5 text-spiritual" />}
-                                {doc.file_type === 'xml' && <BookOpen className="h-5 w-5 text-green-500" />}
-                                {doc.file_type === 'txt' && <FileText className="h-5 w-5 text-gray-500" />}
-                                <div>
-                                  <h4 className="font-medium text-sm">{doc.name}</h4>
-                                  <p className="text-xs text-muted-foreground">
-                                    {doc.file_size_mb} MB
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-1 mb-3 text-xs text-muted-foreground">
-                              <Users className="h-3 w-3" />
-                              <span>{doc.collaborators?.length || 0} colaboradores</span>
-                              {doc.isPublic && (
-                                <>
-                                  <span>•</span>
-                                  <span>Público</span>
-                                </>
-                              )}
-                              {doc.is_bible && (
-                                <>
-                                  <span>•</span>
-                                  <span className="text-spiritual font-medium">📖 En Lector</span>
-                                </>
-                              )}
-                              {(doc.file_type === 'epub' || doc.file_type === 'pdf') && (
-                                <>
-                                  <span>•</span>
-                                  <span className="text-blue-600 font-medium">👥 Colaborativo</span>
-                                </>
-                              )}
-                            </div>
-
-                            <div className="flex gap-1">
-                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                              
-                              {/* Collaborative Reading - Only for EPUBs and PDFs */}
-                              {(doc.file_type === 'epub' || doc.file_type === 'pdf') && (
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  className="h-8 w-8 p-0 text-spiritual hover:text-spiritual"
-                                  onClick={() => {
-                                    // Navigate to collaborative reader
-                                    window.open(`/collaborative-reader/${doc.id}`, '_blank');
-                                  }}
-                                  title="Leer Juntos (Colaborativo)"
-                                >
-                                  <Users className="h-4 w-4" />
-                                </Button>
-                              )}
-                              
-                              {/* Share - For all document types */}
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                className="h-8 w-8 p-0"
-                                onClick={() => {
-                                  const email = prompt('Email del colaborador:');
-                                  if (email) shareDocument(doc.id, email);
-                                }}
-                                title={doc.is_bible ? "Compartir Biblia" : "Compartir Documento"}
-                              >
-                                <Share2 className="h-4 w-4" />
-                              </Button>
-                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                <Download className="h-4 w-4" />
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                                onClick={() => deleteDocument(doc.id)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-
-                            <div className="text-xs text-muted-foreground mt-2">
-                              {new Date(doc.created_at).toLocaleDateString('es-ES')}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          ) : viewMode === 'highlights' ? (
-            <div className="space-y-4">
-              <Card className="border-l-4 border-l-spiritual">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Highlighter className="h-5 w-5 text-spiritual" />
-                    Mis Resaltados
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {highlights.length === 0 ? (
-                    <div className="text-center py-12">
-                      <Highlighter className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-                      <h3 className="text-lg font-semibold mb-2">No tienes resaltados aún</h3>
-                      <p className="text-muted-foreground mb-4">
-                        Selecciona texto en la Biblia para crear tu primer resaltado.
-                      </p>
-                      <Button 
-                        onClick={() => setViewMode('chapter')}
-                        className="bg-spiritual hover:bg-spiritual/90"
-                      >
-                        <BookOpen className="h-4 w-4 mr-2" />
-                        Ir a Lectura
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {/* Filter by categories */}
-                      <div className="flex flex-wrap gap-2 mb-6">
-                        <Button variant="outline" size="sm" className="text-xs">
-                          Todos ({highlights.length})
-                        </Button>
-                        {HIGHLIGHT_CATEGORIES.map((category) => {
-                          const count = highlights.filter(h => h.category === category.id).length;
-                          if (count === 0) return null;
-                          const IconComponent = category.icon;
-                          const colorData = HIGHLIGHT_COLORS[category.color as keyof typeof HIGHLIGHT_COLORS];
-                          return (
-                            <Button 
-                              key={category.id}
-                              variant="outline" 
-                              size="sm" 
-                              className={`text-xs ${colorData?.bg} ${colorData?.text}`}
-                            >
-                              <IconComponent className="h-3 w-3 mr-1" />
-                              {category.name} ({count})
-                            </Button>
-                          );
-                        })}
-                      </div>
-
-                      {/* Highlights grid */}
-                      <div className="grid gap-4">
-                        {highlights.map((highlight) => {
-                          const colorData = HIGHLIGHT_COLORS[highlight.color as keyof typeof HIGHLIGHT_COLORS];
-                          const category = HIGHLIGHT_CATEGORIES.find(c => c.id === highlight.category);
-                          
-                          return (
-                            <Card key={highlight.id} className={`border-l-4 border-l-${highlight.color}-400 hover:shadow-md transition-shadow`}>
-                              <CardContent className="pt-4">
-                                <div className="flex items-start justify-between mb-3">
-                                  <div className="flex items-center gap-2">
-                                    <div className={`w-4 h-4 rounded ${colorData?.bg}`}></div>
-                                    <span className="font-medium text-spiritual">
-                                      {highlight.reference}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-8 w-8 p-0"
-                                      onClick={() => {
-                                        // Navigate to the chapter with this highlight
-                                        setViewMode('chapter');
-                                        toast.success('Navegando al capítulo...');
-                                      }}
-                                    >
-                                      <BookOpen className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                                      onClick={() => {
-                                        setHighlights(prev => prev.filter(h => h.id !== highlight.id));
-                                        toast.success('Resaltado eliminado');
-                                      }}
-                                    >
-                                      ✕
-                                    </Button>
-                                  </div>
-                                </div>
-                                
-                                <blockquote className={`text-lg leading-relaxed mb-3 p-4 rounded-lg ${colorData?.bg} border-l-4 border-l-${highlight.color}-500`}>
-                                  "{highlight.text}"
-                                </blockquote>
-                                
-                                <div className="flex items-center justify-between text-sm text-muted-foreground">
-                                  <div className="flex items-center gap-2">
-                                    {category && (
-                                      <div className="flex items-center gap-1">
-                                        <category.icon className="h-4 w-4" />
-                                        <span>{category.name}</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                  <span>
-                                    {new Date(highlight.createdAt).toLocaleDateString('es-ES', {
-                                      year: 'numeric',
-                                      month: 'short',
-                                      day: 'numeric'
-                                    })}
-                                  </span>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          ) : viewMode === 'search' ? (
-            searchResults?.length === 0 ? (
-              <Card>
-                <CardContent className="text-center py-8">
+              {userDocuments.length === 0 ? (
+                <div className="bible-glass-card p-12 text-center">
+                  <FileText className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No tienes documentos aún</h3>
                   <p className="text-muted-foreground">
-                    {searchQuery ? 'No verses found. Try a different search term.' : 'Enter a search term to find verses.'}
+                    Sube tu primera Biblia, EPUB o PDF para comenzar
                   </p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-4">
-                {searchResults?.map((verse, index) => (
-                  <Card key={verse.id || index} className="border-l-4 border-l-spiritual">
-                    <CardContent className="pt-6">
-                      <div className="space-y-4">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h3 className="text-lg font-semibold text-spiritual">
-                              {formatVerseReference(verse.reference)}
-                            </h3>
-                            <Badge variant="outline" className="mt-1">
-                              {bibleVersions.find(v => v.id === selectedVersion)?.abbreviation || 'Bible'}
-                            </Badge>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {userDocuments.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="bible-glass-card p-4 cursor-pointer hover:scale-105 transition-transform"
+                      onClick={() => {
+                        if (doc.is_bible) {
+                          handleVersionChange(`user-${doc.id}`);
+                          setViewMode('chapter');
+                        } else if (doc.file_type === 'epub' || doc.file_type === 'pdf') {
+                          navigate(`/collaborative-reader/${doc.id}`);
+                        }
+                      }}
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                            doc.file_type === 'pdf' ? 'bg-red-500/20' :
+                            doc.file_type === 'epub' ? 'bg-blue-500/20' :
+                            doc.file_type === 'xml' ? 'bg-green-500/20' :
+                            doc.file_type === 'json' ? 'bg-orange-500/20' :
+                            'bg-gray-500/20'
+                          }`}>
+                            {doc.file_type === 'pdf' ? <FileText className="h-5 w-5 text-red-400" /> :
+                             doc.file_type === 'epub' ? <BookOpen className="h-5 w-5 text-blue-400" /> :
+                             <BookOpen className="h-5 w-5 text-orange-400" />}
                           </div>
-                          <div className="flex gap-2">
-                            <Button variant="ghost" size="sm">
-                              <Highlighter className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="sm">
-                              <MessageSquare className="h-4 w-4" />
-                            </Button>
+                          <div>
+                            <h4 className="font-medium text-sm">{doc.name}</h4>
+                            <p className="text-xs text-muted-foreground">{doc.file_size_mb} MB</p>
                           </div>
                         </div>
-                        <p className="text-lg leading-relaxed" dangerouslySetInnerHTML={{ __html: verse.text }} />
                       </div>
-                    </CardContent>
-                  </Card>
+
+                      <div className="flex items-center gap-2 mb-3 text-xs text-muted-foreground">
+                        <Users className="h-3 w-3" />
+                        <span>{doc.collaborators?.length || 0} colaboradores</span>
+                        {doc.is_bible && (
+                          <span className="bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded-full text-xs">Biblia</span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(doc.created_at).toLocaleDateString('es-ES')}
+                        </span>
+                        <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            className="p-2 rounded-full hover:bg-white/10 text-muted-foreground transition-colors"
+                            onClick={() => {
+                              const email = prompt('Email del colaborador:');
+                              if (email) shareDocument(doc.id, email);
+                            }}
+                          >
+                            <Share2 className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            className="p-2 rounded-full hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors"
+                            onClick={() => deleteDocument(doc.id)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : viewMode === 'highlights' ? (
+            <>
+              {highlights.length === 0 ? (
+                <div className="bible-glass-card p-12 text-center">
+                  <Highlighter className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No tienes resaltados aún</h3>
+                  <p className="text-muted-foreground mb-4">
+                    Selecciona texto en la Biblia para crear tu primer resaltado
+                  </p>
+                  <button
+                    onClick={() => setViewMode('chapter')}
+                    className="bg-orange-500/20 hover:bg-orange-500/30 backdrop-blur-sm rounded-full px-6 py-3 text-orange-400 font-medium transition-colors"
+                  >
+                    <BookOpen className="h-4 w-4 inline mr-2" />
+                    Ir a Lectura
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {/* Category Filters */}
+                  <div className="flex flex-wrap gap-2">
+                    <button className="bg-white/10 rounded-full px-4 py-1.5 text-sm text-foreground">
+                      Todos ({highlights.length})
+                    </button>
+                    {HIGHLIGHT_CATEGORIES.map((category) => {
+                      const count = highlights.filter(h => h.category === category.id).length;
+                      if (count === 0) return null;
+                      const IconComponent = category.icon;
+                      return (
+                        <button
+                          key={category.id}
+                          className={`rounded-full px-4 py-1.5 text-sm flex items-center gap-1.5 bg-${category.color}-500/20 text-${category.color}-400`}
+                        >
+                          <IconComponent className="h-3 w-3" />
+                          {category.name} ({count})
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Highlights List */}
+                  <div className="space-y-3">
+                    {highlights.map((highlight) => {
+                      const colorData = HIGHLIGHT_COLORS[highlight.color as keyof typeof HIGHLIGHT_COLORS];
+                      const category = HIGHLIGHT_CATEGORIES.find(c => c.id === highlight.category);
+
+                      return (
+                        <div key={highlight.id} className="bible-glass-card p-4 border-l-4 border-l-orange-400">
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-3 h-3 rounded-full ${colorData?.bg}`}></div>
+                              <span className="font-medium text-orange-400 text-sm">{highlight.reference}</span>
+                            </div>
+                            <div className="flex gap-1">
+                              <button
+                                className="p-1.5 rounded-full hover:bg-white/10 transition-colors"
+                                onClick={() => { setViewMode('chapter'); toast.success('Navegando al capítulo...'); }}
+                              >
+                                <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                              </button>
+                              <button
+                                className="p-1.5 rounded-full hover:bg-red-500/10 transition-colors"
+                                onClick={() => { setHighlights(prev => prev.filter(h => h.id !== highlight.id)); toast.success('Eliminado'); }}
+                              >
+                                <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-red-400" />
+                              </button>
+                            </div>
+                          </div>
+                          <blockquote className={`text-base leading-relaxed p-3 rounded-lg ${colorData?.bg} mb-2`}>
+                            "{highlight.text}"
+                          </blockquote>
+                          <div className="flex items-center justify-between text-xs text-muted-foreground">
+                            {category && (
+                              <div className="flex items-center gap-1">
+                                <category.icon className="h-3 w-3" />
+                                <span>{category.name}</span>
+                              </div>
+                            )}
+                            <span>{new Date(highlight.createdAt).toLocaleDateString('es-ES', { month: 'short', day: 'numeric' })}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </>
+          ) : viewMode === 'search' ? (
+            searchResults?.length === 0 ? (
+              <div className="bible-glass-card p-8 text-center">
+                <p className="text-muted-foreground">
+                  {searchQuery ? 'No se encontraron versículos.' : 'Escribe algo para buscar.'}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {searchResults?.map((verse, index) => (
+                  <div key={verse.id || index} className="bible-glass-card p-4 border-l-4 border-l-orange-400">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <h3 className="font-semibold text-orange-400">
+                          {formatVerseReference(verse.reference)}
+                        </h3>
+                        <span className="text-xs text-muted-foreground bg-white/10 rounded-full px-2 py-0.5 inline-block mt-1">
+                          {bibleVersions.find(v => v.id === selectedVersion)?.abbreviation || 'Bible'}
+                        </span>
+                      </div>
+                      <div className="flex gap-1">
+                        <button className="p-2 rounded-full hover:bg-white/10 text-muted-foreground">
+                          <Highlighter className="h-4 w-4" />
+                        </button>
+                        <button className="p-2 rounded-full hover:bg-white/10 text-muted-foreground">
+                          <MessageSquare className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-base leading-relaxed" dangerouslySetInnerHTML={{ __html: verse.text }} />
+                  </div>
                 ))}
               </div>
             )
           ) : (
             loadingChapter ? (
-              <Card>
-                <CardContent className="text-center py-8">
-                  <p className="text-muted-foreground">Loading chapter...</p>
-                </CardContent>
-              </Card>
+              <div className="bible-glass-card p-12 text-center">
+                <BookOpen className="h-12 w-12 text-orange-400 mx-auto mb-4 animate-pulse" />
+                <p className="text-muted-foreground">Cargando capítulo...</p>
+              </div>
             ) : !currentChapter ? (
-              <Card>
-                <CardContent className="text-center py-8">
-                  <p className="text-muted-foreground">
-                    Select a book and chapter to start reading
-                  </p>
-                </CardContent>
-              </Card>
+              <div className="bible-glass-card p-12 text-center">
+                <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">
+                  Selecciona un libro y capítulo para empezar a leer
+                </p>
+              </div>
             ) : (
-              <Card className="border-l-4 border-l-spiritual">
+              <div className="bible-glass-card p-0 overflow-hidden">
+                <div className="relative">
+                  <div
+                    className="bible-text select-text"
+                    style={{
+                      fontSize: '1.2rem',
+                      lineHeight: '2.2rem',
+                      fontFamily: 'Georgia, "Times New Roman", serif',
+                      textAlign: 'justify',
+                      color: 'hsl(var(--foreground))',
+                      padding: '2rem',
+                      userSelect: 'text',
+                      WebkitUserSelect: 'text',
+                      MozUserSelect: 'text',
+                      msUserSelect: 'text',
+                    }}
+                    onMouseUp={handleTextSelection}
+                    onTouchEnd={handleTextSelection}
+                    onClick={(e) => {
+                      const target = e.target as HTMLElement;
+                      if (target.hasAttribute('data-highlight-id')) {
+                        const highlightId = target.getAttribute('data-highlight-id');
+                        if (highlightId) handleHighlightClick(highlightId);
+                      }
+                    }}
+                    dangerouslySetInnerHTML={{
+                      __html: (() => {
+                        let content = currentChapter.content
+                          .replace(/class="[^"]*"/g, '')
+                          .replace(/<span[^>]*data-number="(\d+)"[^>]*>/g, '<sup>$1</sup>')
+                          .replace(/<\/span>/g, '')
+                          .replace(/\s+/g, ' ')
+                          .replace(/(\d+)\s+/g, '<sup>$1</sup> ');
 
-                <CardContent>
-                  <div className="max-w-4xl mx-auto">
-                    <div className="relative">
-                      <div
-                        className="bible-text select-text"
-                        style={{
-                          fontSize: '1.2rem',
-                          lineHeight: '2.2rem',
-                          fontFamily: 'Georgia, "Times New Roman", serif',
-                          textAlign: 'justify',
-                          color: 'hsl(var(--foreground))',
-                          padding: '2rem',
-                          background: 'linear-gradient(135deg, hsl(var(--background)) 0%, hsl(var(--muted)/0.3) 100%)',
-                          borderRadius: '0.75rem',
-                          boxShadow: 'inset 0 1px 3px 0 hsl(var(--muted))',
-                          userSelect: 'text',
-                          WebkitUserSelect: 'text',
-                          MozUserSelect: 'text',
-                          msUserSelect: 'text',
-                        }}
-                        onMouseUp={handleTextSelection}
-                        onTouchEnd={handleTextSelection}
-                        onClick={(e) => {
-                          const target = e.target as HTMLElement;
-                          if (target.hasAttribute('data-highlight-id')) {
-                            const highlightId = target.getAttribute('data-highlight-id');
-                            if (highlightId) {
-                              handleHighlightClick(highlightId);
-                            }
+                        highlights.forEach(highlight => {
+                          if (highlight.chapterId === currentChapter.id) {
+                            const escapedText = highlight.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                            const regex = new RegExp(escapedText, 'gi');
+                            content = content.replace(regex, `<span class="highlight-${highlight.color}" data-highlight-id="${highlight.id}">$&</span>`);
                           }
-                        }}
-                        dangerouslySetInnerHTML={{
-                          __html: (() => {
-                            // First, process the base content
-                            let content = currentChapter.content
-                              .replace(/class="[^"]*"/g, '') // Remove existing classes
-                              .replace(/<span[^>]*data-number="(\d+)"[^>]*>/g, '<sup>$1</sup>') // Style verse numbers as superscript
-                              .replace(/<\/span>/g, '') // Remove closing span tags
-                              .replace(/\s+/g, ' ') // Normalize whitespace
-                              .replace(/(\d+)\s+/g, '<sup>$1</sup> '); // Catch any remaining verse numbers
+                        });
 
-                            // Apply highlights to the content
-                            highlights.forEach(highlight => {
-                              if (highlight.chapterId === currentChapter.id) {
-                                const highlightClass = `highlight-${highlight.color}`;
-                                // Escape special regex characters in the highlight text
-                                const escapedText = highlight.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                                const regex = new RegExp(escapedText, 'gi');
-                                content = content.replace(regex, `<span class="${highlightClass}" title="Categoría: ${highlight.category || 'Sin categoría'}" data-highlight-id="${highlight.id}">$&</span>`);
-                              }
-                            });
+                        return `
+                          <style>
+                            .bible-text sup { font-size: 0.7em; color: hsl(var(--spiritual)); font-weight: 600; margin-right: 0.2em; padding: 0.1em 0.3em; background: hsl(var(--spiritual)/0.1); border-radius: 0.25rem; line-height: 1; }
+                            .bible-text p { margin-bottom: 1.5rem; text-indent: 1.5rem; }
+                            .bible-text p:first-child { text-indent: 0; }
+                            .bible-text::selection { background: hsl(var(--spiritual)/0.3); }
+                            .highlight-yellow { background-color: #fef3c7; padding: 2px 4px; border-radius: 3px; border-left: 3px solid #f59e0b; cursor: pointer; }
+                            .highlight-blue { background-color: #dbeafe; padding: 2px 4px; border-radius: 3px; border-left: 3px solid #3b82f6; cursor: pointer; }
+                            .highlight-green { background-color: #d1fae5; padding: 2px 4px; border-radius: 3px; border-left: 3px solid #10b981; cursor: pointer; }
+                            .highlight-pink { background-color: #fce7f3; padding: 2px 4px; border-radius: 3px; border-left: 3px solid #ec4899; cursor: pointer; }
+                            .highlight-purple { background-color: #e9d5ff; padding: 2px 4px; border-radius: 3px; border-left: 3px solid #8b5cf6; cursor: pointer; }
+                            .highlight-orange { background-color: #fed7aa; padding: 2px 4px; border-radius: 3px; border-left: 3px solid #f97316; cursor: pointer; }
+                            [class*="highlight-"]:hover { transform: scale(1.02); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+                          </style>
+                          ${content}
+                        `;
+                      })()
+                    }}
+                  />
 
-                            return `
-                              <style>
-                                .bible-text sup {
-                                  font-size: 0.7em;
-                                  color: hsl(var(--spiritual));
-                                  font-weight: 600;
-                                  margin-right: 0.2em;
-                                  padding: 0.1em 0.3em;
-                                  background: hsl(var(--spiritual)/0.1);
-                                  border-radius: 0.25rem;
-                                  line-height: 1;
-                                }
-                                .bible-text p {
-                                  margin-bottom: 1.5rem;
-                                  text-indent: 1.5rem;
-                                }
-                                .bible-text p:first-child {
-                                  text-indent: 0;
-                                }
-                                .bible-text::selection {
-                                  background: hsl(var(--spiritual)/0.3);
-                                  color: hsl(var(--spiritual-foreground));
-                                }
-                                .bible-text::-moz-selection {
-                                  background: hsl(var(--spiritual)/0.3);
-                                  color: hsl(var(--spiritual-foreground));
-                                }
-                                .highlight-yellow { 
-                                  background-color: #fef3c7; 
-                                  padding: 2px 4px; 
-                                  border-radius: 3px; 
-                                  border-left: 3px solid #f59e0b;
-                                  cursor: pointer;
-                                  transition: all 0.2s;
-                                }
-                                .highlight-blue { 
-                                  background-color: #dbeafe; 
-                                  padding: 2px 4px; 
-                                  border-radius: 3px; 
-                                  border-left: 3px solid #3b82f6;
-                                  cursor: pointer;
-                                  transition: all 0.2s;
-                                }
-                                .highlight-green { 
-                                  background-color: #d1fae5; 
-                                  padding: 2px 4px; 
-                                  border-radius: 3px; 
-                                  border-left: 3px solid #10b981;
-                                  cursor: pointer;
-                                  transition: all 0.2s;
-                                }
-                                .highlight-pink { 
-                                  background-color: #fce7f3; 
-                                  padding: 2px 4px; 
-                                  border-radius: 3px; 
-                                  border-left: 3px solid #ec4899;
-                                  cursor: pointer;
-                                  transition: all 0.2s;
-                                }
-                                .highlight-purple { 
-                                  background-color: #e9d5ff; 
-                                  padding: 2px 4px; 
-                                  border-radius: 3px; 
-                                  border-left: 3px solid #8b5cf6;
-                                  cursor: pointer;
-                                  transition: all 0.2s;
-                                }
-                                .highlight-orange { 
-                                  background-color: #fed7aa; 
-                                  padding: 2px 4px; 
-                                  border-radius: 3px; 
-                                  border-left: 3px solid #f97316;
-                                  cursor: pointer;
-                                  transition: all 0.2s;
-                                }
-                                [class*="highlight-"]:hover {
-                                  transform: scale(1.02);
-                                  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-                                }
-                              </style>
-                              ${content}
-                            `;
-                          })()
-                        }}
-                      />
-
-                      {/* Highlight Menu */}
-                      {showHighlightMenu && (
-                        <div
-                          className="fixed z-50 bg-white dark:bg-gray-800 rounded-lg shadow-lg border p-2"
-                          style={{
-                            left: highlightMenuPosition.x - 150,
-                            top: highlightMenuPosition.y - 80,
-                            width: '300px'
-                          }}
-                        >
-                          <div className="text-xs font-medium text-muted-foreground mb-2">
-                            Resaltar: "{selectedText.substring(0, 30)}..."
-                          </div>
-
-                          <div className="grid grid-cols-3 gap-1 mb-3">
-                            {Object.entries(HIGHLIGHT_COLORS).map(([colorKey, colorData]) => (
-                              <Button
-                                key={colorKey}
-                                variant="outline"
-                                size="sm"
-                                className={`h-8 ${colorData.bg} ${colorData.text} border-2`}
-                                onClick={() => createHighlight(colorKey)}
-                              >
-                                <Palette className="h-3 w-3 mr-1" />
-                                {colorData.name}
-                              </Button>
-                            ))}
-                          </div>
-
-                          <div className="border-t pt-2">
-                            <div className="text-xs font-medium text-muted-foreground mb-1">Categorías:</div>
-                            <div className="grid grid-cols-2 gap-1">
-                              {HIGHLIGHT_CATEGORIES.map((category) => {
-                                const IconComponent = category.icon;
-                                const colorData = HIGHLIGHT_COLORS[category.color as keyof typeof HIGHLIGHT_COLORS];
-                                return (
-                                  <Button
-                                    key={category.id}
-                                    variant="ghost"
-                                    size="sm"
-                                    className={`h-7 text-xs ${colorData.bg} ${colorData.text}`}
-                                    onClick={() => createHighlight(category.color, category.id)}
-                                  >
-                                    <IconComponent className="h-3 w-3 mr-1" />
-                                    {category.name}
-                                  </Button>
-                                );
-                              })}
-                            </div>
-                          </div>
-
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="w-full mt-2 text-xs"
-                            onClick={() => setShowHighlightMenu(false)}
+                  {/* Highlight Menu */}
+                  {showHighlightMenu && (
+                    <div
+                      className="fixed z-50 bible-glass-card p-3"
+                      style={{
+                        left: highlightMenuPosition.x - 150,
+                        top: highlightMenuPosition.y - 80,
+                        width: '300px'
+                      }}
+                    >
+                      <div className="text-xs font-medium text-muted-foreground mb-2">
+                        Resaltar: "{selectedText.substring(0, 30)}..."
+                      </div>
+                      <div className="grid grid-cols-3 gap-1 mb-3">
+                        {Object.entries(HIGHLIGHT_COLORS).map(([colorKey, colorData]) => (
+                          <button
+                            key={colorKey}
+                            className={`h-8 rounded-lg text-xs font-medium flex items-center justify-center gap-1 ${colorData.bg} ${colorData.text}`}
+                            onClick={() => createHighlight(colorKey)}
                           >
-                            Cancelar
-                          </Button>
+                            <Palette className="h-3 w-3" />
+                            {colorData.name}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="border-t border-white/10 pt-2">
+                        <div className="text-xs text-muted-foreground mb-1">Categorías:</div>
+                        <div className="grid grid-cols-2 gap-1">
+                          {HIGHLIGHT_CATEGORIES.map((cat) => {
+                            const Icon = cat.icon;
+                            const cd = HIGHLIGHT_COLORS[cat.color as keyof typeof HIGHLIGHT_COLORS];
+                            return (
+                              <button
+                                key={cat.id}
+                                className={`h-7 rounded-lg text-xs flex items-center justify-center gap-1 ${cd.bg} ${cd.text}`}
+                                onClick={() => createHighlight(cat.color, cat.id)}
+                              >
+                                <Icon className="h-3 w-3" />
+                                {cat.name}
+                              </button>
+                            );
+                          })}
                         </div>
-                      )}
+                      </div>
+                      <button
+                        className="w-full mt-2 text-xs text-muted-foreground hover:text-foreground py-1"
+                        onClick={() => setShowHighlightMenu(false)}
+                      >
+                        Cancelar
+                      </button>
                     </div>
-                  </div>
+                  )}
+                </div>
 
-                  <div className="mt-8 pt-6 border-t flex justify-between items-center">
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => navigateChapter('prev')}
-                        disabled={!currentChapter.previous}
-                      >
-                        <ChevronLeft className="h-4 w-4 mr-1" />
-                        Previous
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => navigateChapter('next')}
-                        disabled={!currentChapter.next}
-                      >
-                        Next
-                        <ChevronRight className="h-4 w-4 ml-1" />
-                      </Button>
-                    </div>
-                    <span className="text-sm text-muted-foreground">
-                      {currentChapter.reference}
-                    </span>
+                {/* Bottom Nav */}
+                <div className="p-4 border-t border-white/10 flex justify-between items-center">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => navigateChapter('prev')}
+                      disabled={!currentChapter.previous}
+                      className="bg-white/5 hover:bg-white/10 rounded-full px-4 py-2 text-sm text-muted-foreground disabled:opacity-30 flex items-center gap-1 transition-colors"
+                    >
+                      <ChevronLeft className="h-4 w-4" /> Anterior
+                    </button>
+                    <button
+                      onClick={() => navigateChapter('next')}
+                      disabled={!currentChapter.next}
+                      className="bg-white/5 hover:bg-white/10 rounded-full px-4 py-2 text-sm text-muted-foreground disabled:opacity-30 flex items-center gap-1 transition-colors"
+                    >
+                      Siguiente <ChevronRight className="h-4 w-4" />
+                    </button>
                   </div>
-                </CardContent>
-              </Card>
+                  <span className="text-sm text-muted-foreground">{currentChapter.reference}</span>
+                </div>
+              </div>
             )
           )}
         </div>
-
-        <Card className="bg-spiritual-light">
-          <CardContent className="pt-6">
-            <h4 className="font-semibold mb-2">Reading Plans</h4>
-            <p className="text-sm text-muted-foreground mb-4">
-              Create or join Bible reading plans with your community
-            </p>
-            <Button className="bg-spiritual hover:bg-spiritual/90">
-              Explore Plans (Coming Soon)
-            </Button>
-          </CardContent>
-        </Card>
       </div>
-
     </Layout>
   );
 };

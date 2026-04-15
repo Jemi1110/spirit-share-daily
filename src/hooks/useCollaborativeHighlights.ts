@@ -308,6 +308,10 @@ export const useCollaborativeHighlights = ({
     });
   }, [broadcastEvent, onHighlightUpdate]);
 
+  const setInitialHighlights = useCallback((initial: Highlight[]) => {
+    setHighlights(initial);
+  }, []);
+
   // Initialize connection
   useEffect(() => {
     connect();
@@ -331,6 +335,7 @@ export const useCollaborativeHighlights = ({
     deleteHighlight,
     addComment,
     updateComment,
-    deleteComment
+    deleteComment,
+    setInitialHighlights
   };
 };

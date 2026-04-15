@@ -34,7 +34,7 @@ export const GloseScrollReader = React.forwardRef<GloseScrollReaderRef, GloseScr
         chapterOrder: chapter.order,
         chapterTitle: chapter.title,
         content: chapter.content,
-        isLoaded: true, // TEMPORARY: Load all chapters immediately for smooth reading
+        isLoaded: true,
       }));
       
       setContentChunks(chunks);
@@ -64,11 +64,6 @@ export const GloseScrollReader = React.forwardRef<GloseScrollReaderRef, GloseScr
       
       if (chapterElement) {
         chapterElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      } else {
-        console.warn(`⚠️ GloseScrollReader: Chapter ${chapterNumber} not found`);
-        // Check what chapters are available
-        const allChapters = document.querySelectorAll('[data-chapter]');
-        const availableChapters = Array.from(allChapters).map(el => el.getAttribute('data-chapter'));
       }
     }, 100);
   }, []);

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { getAbsoluteOffset } from '../utils/highlightUtils';
 import Layout from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,28 +13,17 @@ import {
   Users,
   MessageSquare,
   Mic,
-  MicOff,
-  Heart,
-  ThumbsUp,
-  Lightbulb,
-  Heart as Pray,
-  Share2,
-  Settings,
   ChevronLeft,
   ChevronRight,
   Highlighter,
-  Volume2,
-  VolumeX,
-  UserPlus,
   Eye,
   EyeOff,
   List,
-  Menu,
   X,
-  Sparkles
+  Copy
 } from "lucide-react";
 import { toast } from "sonner";
-import { documentAPI } from "@/services/api";
+import { documentAPI, userAPI, getToken } from "@/services/api";
 import { simpleEpubReader, type SimpleEpubBook, type SimpleChapter, type EpubLoadingProgress } from "@/services/simpleEpubReader";
 import { GloseScrollReader } from "@/components/GloseScrollReader";
 import { TextSelectionHandler } from "@/components/TextSelectionHandler";
@@ -274,6 +264,10 @@ const CollaborativeReader = () => {
   const [totalChapters, setTotalChapters] = useState(0);
   const [useGloseReader, setUseGloseReader] = useState(true); // Enable Glose-style reading
 
+  // User identity - fetched from backend or localStorage
+  const [currentUserId, setCurrentUserId] = useState<string>('current-user');
+  const [currentUserName, setCurrentUserName] = useState<string>('Usuario');
+
   // Reading progress tracking
   const [isProgressLoaded, setIsProgressLoaded] = useState(false);
   const autoSaveCleanupRef = useRef<(() => void) | null>(null);
@@ -348,12 +342,13 @@ const CollaborativeReader = () => {
     deleteHighlight: deleteCollaborativeHighlight,
     addComment: addCollaborativeComment,
     updateComment: updateCollaborativeComment,
-    deleteComment: deleteCollaborativeComment
+    deleteComment: deleteCollaborativeComment,
+    setInitialHighlights
   } = useCollaborativeHighlights({
     sessionId: sessionId || 'local-session',
-    userId: 'current-user',
-    userName: 'Current User',
-    onHighlightUpdate: async (updatedHighlights) => {
+    userId: currentUserId,
+    userName: currentUserName,
+    onHighlightUpdate: useCallback(async (updatedHighlights: Highlight[]) => {
       // Save highlights to Django backend (with localStorage fallback)
       try {
         for (const highlight of updatedHighlights) {
@@ -363,7 +358,8 @@ const CollaborativeReader = () => {
             userName: highlight.userName,
             text: highlight.text,
             color: highlight.color,
-            chapterNumber: highlight.chapterNumber
+            chapterNumber: highlight.chapterNumber,
+            documentId: documentId
           });
         }
         // Highlights saved successfully
@@ -374,15 +370,43 @@ const CollaborativeReader = () => {
         localStorage.setItem(storageKey, JSON.stringify(updatedHighlights));
         // Highlights saved to localStorage as fallback
       }
-    }
+    }, [documentId])
   });
+
+  // Keep selected block in sync so that comments update instantly in the popup
+  useEffect(() => {
+    if (showCommentPopup && selectedHighlight) {
+      const updatedMatch = highlights.find(h => h.id === selectedHighlight.id);
+      if (updatedMatch && JSON.stringify(updatedMatch.comments) !== JSON.stringify(selectedHighlight.comments)) {
+        setSelectedHighlight(updatedMatch);
+      }
+    }
+  }, [highlights, selectedHighlight, showCommentPopup]);
+
+  // Fetch current user profile
+  useEffect(() => {
+    const fetchUser = async () => {
+      const token = getToken();
+      if (!token) return;
+      try {
+        const profile: any = await userAPI.getProfile();
+        if (profile?.username) {
+          setCurrentUserId(profile.id?.toString() || profile.username);
+          setCurrentUserName(profile.username);
+        }
+      } catch {
+        // Not logged in or error - keep defaults
+      }
+    };
+    fetchUser();
+  }, []);
 
   // Load saved highlights on component mount
   useEffect(() => {
     const loadSavedHighlights = async () => {
       try {
         // Load highlights from Django backend
-        const djangoHighlights = await simpleDjangoHighlightService.loadHighlights();
+        const djangoHighlights = await simpleDjangoHighlightService.loadHighlights(documentId);
 
         if (djangoHighlights.length > 0) {
 
@@ -390,27 +414,26 @@ const CollaborativeReader = () => {
           if (highlights.length === 0) {
 
             // Convert Django format to frontend format
-            djangoHighlights.forEach((djangoHighlight: any) => {
-              const highlight = {
-                id: djangoHighlight.id,
-                userId: 'django-user',
-                userName: djangoHighlight.user_name,
-                text: djangoHighlight.highlighted_text, // Use correct field name
-                color: djangoHighlight.color,
-                chapterNumber: djangoHighlight.chapter_number || 1, // Use actual chapter number
-                textRange: {
-                  startOffset: djangoHighlight.start_offset || 0,
-                  endOffset: djangoHighlight.end_offset || djangoHighlight.highlighted_text.length,
-                  startContainer: `[data-chapter="${djangoHighlight.chapter_number || 1}"]`,
-                  endContainer: `[data-chapter="${djangoHighlight.chapter_number || 1}"]`
-                },
-                position: { x: 100, y: 100 },
-                comments: [],
-                createdAt: djangoHighlight.created_at || new Date().toISOString(),
-                updatedAt: djangoHighlight.created_at || new Date().toISOString()
-              };
-              createCollaborativeHighlight(highlight);
-            });
+            const mappedHighlights = djangoHighlights.map((djangoHighlight: any) => ({
+              id: djangoHighlight.id,
+              userId: 'django-user',
+              userName: djangoHighlight.user_name,
+              text: djangoHighlight.highlighted_text, // Use correct field name
+              color: djangoHighlight.color,
+              chapterNumber: djangoHighlight.chapter_number || 1, // Use actual chapter number
+              textRange: {
+                startOffset: djangoHighlight.start_offset || 0,
+                endOffset: djangoHighlight.end_offset || djangoHighlight.highlighted_text.length,
+                startContainer: `[data-chapter="${djangoHighlight.chapter_number || 1}"]`,
+                endContainer: `[data-chapter="${djangoHighlight.chapter_number || 1}"]`
+              },
+              position: { x: 100, y: 100 },
+              comments: [],
+              createdAt: djangoHighlight.created_at || new Date().toISOString(),
+              updatedAt: djangoHighlight.created_at || new Date().toISOString()
+            }));
+            
+            setInitialHighlights(mappedHighlights);
           }
         }
       } catch (error) {
@@ -424,9 +447,7 @@ const CollaborativeReader = () => {
             const parsedHighlights = JSON.parse(savedHighlights);
 
             if (highlights.length === 0 && parsedHighlights.length > 0) {
-              parsedHighlights.forEach((highlight: any) => {
-                createCollaborativeHighlight(highlight);
-              });
+              setInitialHighlights(parsedHighlights);
             }
           }
         } catch (localError) {
@@ -439,7 +460,7 @@ const CollaborativeReader = () => {
     if (documentId && epubBook && highlights.length === 0) {
       loadSavedHighlights();
     }
-  }, [documentId, epubBook, highlights.length, createCollaborativeHighlight]);
+  }, [documentId, epubBook, highlights.length, setInitialHighlights]);
 
   // Audio recording
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -571,24 +592,20 @@ const CollaborativeReader = () => {
 
     const highlightId = `highlight_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    // Calculate text range offsets
+    // Calculate text range offsets using deterministic TreeWalker
     const chapterElement = document.querySelector(`[data-chapter="${textSelection.chapterNumber}"]`);
     if (!chapterElement) {
       console.error('Chapter element not found');
       return;
     }
 
-    const chapterText = chapterElement.textContent || '';
-    const beforeRange = document.createRange();
-    beforeRange.selectNodeContents(chapterElement);
-    beforeRange.setEnd(textSelection.range.startContainer, textSelection.range.startOffset);
-    const startOffset = beforeRange.toString().length;
-    const endOffset = startOffset + textSelection.selectedText.length;
+    const startOffset = getAbsoluteOffset(chapterElement, textSelection.range.startContainer, textSelection.range.startOffset);
+    const endOffset = getAbsoluteOffset(chapterElement, textSelection.range.endContainer, textSelection.range.endOffset);
 
     const newHighlight: Highlight = {
       id: highlightId,
-      userId: 'current-user',
-      userName: 'Current User',
+      userId: currentUserId,
+      userName: currentUserName,
       userAvatar: undefined,
       text: textSelection.selectedText,
       color,
@@ -646,17 +663,27 @@ const CollaborativeReader = () => {
   }, []);
 
   // Comment management
-  const handleAddComment = useCallback((highlightId: string, commentData: Omit<Comment, 'id' | 'timestamp'>) => {
+  const handleAddComment = useCallback(async (highlightId: string, commentData: Omit<Comment, 'id' | 'timestamp'>) => {
     const newComment: Comment = {
       ...commentData,
       id: `comment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       timestamp: new Date().toISOString()
     };
 
-    // Add comment collaboratively
+    // Add comment to local state
     addCollaborativeComment(newComment);
 
-  }, [addCollaborativeComment]);
+    // Persist comment to Django backend
+    try {
+      await simpleDjangoHighlightService.saveComment(highlightId, {
+        text: commentData.content || commentData.emoji || '',
+        userName: currentUserName,
+      });
+    } catch {
+      // Comment saved locally but failed to persist - still works in session
+    }
+
+  }, [addCollaborativeComment, currentUserName]);
 
   const handleEditComment = useCallback((highlightId: string, commentId: string, newContent: string) => {
     updateCollaborativeComment(highlightId, commentId, {
@@ -710,7 +737,7 @@ const CollaborativeReader = () => {
       if (!documentId || !epubBook || isProgressLoaded) return;
 
       try {
-        const progress = await readingProgressService.loadProgress(documentId, 'current-user');
+        const progress = await readingProgressService.loadProgress(documentId, currentUserId);
 
         if (progress) {
 
@@ -745,7 +772,7 @@ const CollaborativeReader = () => {
     // Start auto-save
     const cleanup = readingProgressService.startAutoSave(
       documentId,
-      'current-user',
+      currentUserId,
       () => currentChapter,
       () => window.scrollY,
       () => totalChapters
@@ -882,80 +909,30 @@ const CollaborativeReader = () => {
 
       toast.error(`Error al procesar el archivo EPUB: ${errorMessage}`);
 
-      // Try a simpler approach - create a basic EPUB structure
-      try {
-        // Fallback: create basic EPUB structure
-        const fallbackBook: SimpleEpubBook = {
-          title: doc.name.replace(/\.(epub|EPUB)$/, '').replace(/_/g, ' '),
-          author: 'Unknown Author',
-          chapters: [
-            {
-              id: 'chapter-1',
-              title: 'Capítulo 1: Contenido de Prueba',
-              content: `
-                <h2>Lector Glose Funcionando</h2>
-                <p>Este es contenido de prueba para verificar que el sistema de lectura continua está funcionando correctamente.</p>
-                <p>El lector implementa scroll continuo como Glose, con carga progresiva de capítulos.</p>
-                <h3>Características</h3>
-                <ul>
-                  <li>Scroll fluido y continuo</li>
-                  <li>Navegación automática entre capítulos</li>
-                  <li>Detección de capítulo actual</li>
-                </ul>
-              `,
-              order: 1,
-              wordCount: 45
-            }
-          ],
-          totalChapters: 1
-        };
-
-        setEpubBook(fallbackBook);
-        setCurrentChapterData(fallbackBook.chapters[0]);
-        setTotalChapters(1);
-        toast.success(`EPUB cargado con estructura básica: ${fallbackBook.title}`);
-      } catch (simpleError) {
-        console.error('Simple EPUB approach also failed:', simpleError);
-      }
-
-      // Final fallback - force create a working EPUB structure
-      const forcedBook: SimpleEpubBook = {
+      // Fallback: show error message as content
+      const fallbackBook: SimpleEpubBook = {
         title: doc.name.replace(/\.(epub|EPUB)$/, '').replace(/_/g, ' '),
-        author: 'Unknown Author',
+        author: '',
         chapters: [
           {
             id: 'chapter-1',
-            title: 'Capítulo 1: Inicio',
+            title: 'Error al cargar',
             content: `
-              <h2>Primer Capítulo</h2>
-              <p>Este es el contenido del primer capítulo del libro. El sistema de lectura Glose está funcionando correctamente.</p>
-              <p>Puedes hacer scroll para continuar leyendo de forma fluida.</p>
+              <h2>No se pudo procesar este archivo</h2>
+              <p>El formato del EPUB no es compatible o el archivo está dañado.</p>
+              <p>Intenta subir otro archivo o verifica que el EPUB sea válido.</p>
             `,
             order: 1,
-            wordCount: 30
-          },
-          {
-            id: 'chapter-2',
-            title: 'Capítulo 2: Continuación',
-            content: `
-              <h2>Segundo Capítulo</h2>
-              <p>Este es el contenido del segundo capítulo del libro.</p>
-              <p>La navegación entre capítulos es automática y fluida, como en Glose.</p>
-              <blockquote>
-                <p>El scroll continuo permite una experiencia de lectura natural.</p>
-              </blockquote>
-            `,
-            order: 2,
-            wordCount: 35
+            wordCount: 20
           }
         ],
-        totalChapters: 2
+        totalChapters: 1
       };
 
-      setEpubBook(forcedBook);
-      setCurrentChapterData(forcedBook.chapters[0]);
-      setTotalChapters(2);
-      toast.success(`EPUB cargado con analizador básico: ${forcedBook.title}`);
+      setEpubBook(fallbackBook);
+      setCurrentChapterData(fallbackBook.chapters[0]);
+      setTotalChapters(1);
+      toast.error('No se pudo procesar el EPUB. Verifica el archivo.');
     }
   };
 
@@ -1538,10 +1515,10 @@ const CollaborativeReader = () => {
         onClose={handleSelectionCleared}
       />
 
-      {/* Desktop Layout - EXACTO como BibleAppPreview */}
-      <div className="hidden lg:flex">
-        {/* Sidebar */}
-        <div className="w-80 bg-card/50 backdrop-blur-lg border-r border-border p-6 space-y-6">
+      {/* Desktop Layout */}
+      <div className="hidden lg:flex h-screen overflow-hidden">
+        {/* Sidebar - Fixed height, scrollable independently */}
+        <div className="w-80 bg-card/50 backdrop-blur-lg border-r border-border p-6 space-y-6 overflow-y-auto flex-shrink-0">
           {/* Header */}
           <div className="mb-8">
             <div className="flex items-center justify-between mb-2">
@@ -1592,15 +1569,21 @@ const CollaborativeReader = () => {
               <MessageSquare className="w-5 h-5" />
               <span>Comentarios</span>
             </button>
-            <button className="w-full flex items-center gap-3 p-3 rounded-lg text-muted-foreground hover:bg-muted/50">
+            <button 
+              onClick={() => setShowParticipants(!showParticipants)}
+              className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors border-2 ${showParticipants 
+                ? 'bg-blue-50/50 text-blue-700 border-blue-600' 
+                : 'text-muted-foreground hover:bg-muted/50 border-transparent'
+              }`}
+            >
               <Users className="w-5 h-5" />
               <span>Colaboradores</span>
             </button>
           </nav>
         </div>
 
-        {/* Main Content */}
-        <div className="flex-1 p-8 max-w-4xl">
+        {/* Main Content - Scrollable independently */}
+        <div className="flex-1 p-8 max-w-4xl overflow-y-auto">
           <div className="space-y-8">
             {/* Reading Progress Card - Como BibleAppPreview */}
             <div className="bible-card-sunset relative overflow-hidden">
@@ -1661,59 +1644,29 @@ const CollaborativeReader = () => {
               </div>
             </div>
 
-            {/* Grid Layout for Desktop - Como BibleAppPreview */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Reading Content */}
-              <div className="bible-glass-card lg:col-span-2 min-h-[60vh] relative overflow-hidden">
-                <div className="bible-reading-content">
-                  {epubBook && useGloseReader ? (
-                    <GloseScrollReader
-                      ref={gloseReaderRef}
-                      epubBook={epubBook}
-                      onChapterChange={handleChapterChange}
-                      currentChapter={currentChapter}
-                    />
-                  ) : (
-                    <div className="text-center py-12">
-                      <div className="w-8 h-8 border-2 border-gray-500 border-t-transparent rounded-full mx-auto mb-4 animate-spin"></div>
-                      <p className="text-foreground">
-                        {epubBook ? 'Preparando lector...' : 'Cargando contenido...'}
+            {/* Reading Content - Full Width */}
+            <div className="bible-glass-card min-h-[60vh] relative overflow-hidden">
+              <div className="bible-reading-content">
+                {epubBook && useGloseReader ? (
+                  <GloseScrollReader
+                    ref={gloseReaderRef}
+                    epubBook={epubBook}
+                    onChapterChange={handleChapterChange}
+                    currentChapter={currentChapter}
+                  />
+                ) : (
+                  <div className="text-center py-12">
+                    <div className="w-8 h-8 border-2 border-gray-500 border-t-transparent rounded-full mx-auto mb-4 animate-spin"></div>
+                    <p className="text-foreground">
+                      {epubBook ? 'Preparando lector...' : 'Cargando contenido...'}
+                    </p>
+                    {epubBook && (
+                      <p className="text-sm text-muted-foreground mt-2">
+                        Libro: {epubBook.title} ({epubBook.chapters.length} capítulos)
                       </p>
-                      {epubBook && (
-                        <p className="text-sm text-muted-foreground mt-2">
-                          Libro: {epubBook.title} ({epubBook.chapters.length} capítulos)
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Highlights Card */}
-              <div className="bible-card-purple relative">
-                <div className="mb-6">
-                  <h3 className="text-white text-lg font-semibold mb-4">Mis Highlights</h3>
-                  <div className="flex items-center gap-1 mb-6">
-                    {[...Array(8)].map((_, i) => (
-                      <div key={i} className="w-1 h-1 bg-white/40 rounded-full"></div>
-                    ))}
-                    <div className="w-2 h-2 bg-white rounded-full mx-2"></div>
-                    {[...Array(8)].map((_, i) => (
-                      <div key={i} className="w-1 h-1 bg-white/40 rounded-full"></div>
-                    ))}
+                    )}
                   </div>
-                </div>
-
-                <div className="text-center mb-6">
-                  <h4 className="text-white text-xl font-bold mb-1">{highlights.length}</h4>
-                  <h4 className="text-white text-xl font-bold">NOTAS GUARDADAS</h4>
-                </div>
-
-                <div className="flex justify-center">
-                  <div className="w-12 h-12 bg-gray-500 rounded-full flex items-center justify-center">
-                    <Sparkles className="w-6 h-6 text-white" />
-                  </div>
-                </div>
+                )}
               </div>
             </div>
           </div>
@@ -1822,32 +1775,6 @@ const CollaborativeReader = () => {
           </div>
         </div>
 
-        {/* Highlights Card - Mobile */}
-        <div className="bible-card-purple">
-          <div className="mb-4">
-            <h3 className="text-white text-lg font-semibold mb-2">Mis Highlights</h3>
-            <div className="flex items-center gap-1 mb-4">
-              {[...Array(8)].map((_, i) => (
-                <div key={i} className="w-1 h-1 bg-white/40 rounded-full"></div>
-              ))}
-              <div className="w-2 h-2 bg-white rounded-full mx-2"></div>
-              {[...Array(8)].map((_, i) => (
-                <div key={i} className="w-1 h-1 bg-white/40 rounded-full"></div>
-              ))}
-            </div>
-          </div>
-
-          <div className="text-center">
-            <h4 className="text-white text-2xl font-bold mb-2">{highlights.length}</h4>
-            <h4 className="text-white text-2xl font-bold">NOTAS GUARDADAS</h4>
-          </div>
-
-          <div className="absolute bottom-4 left-4">
-            <div className="w-8 h-8 bg-gray-500 rounded-full flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-white ml-0.5" />
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Bottom Navigation - Only on Mobile */}
@@ -1883,29 +1810,17 @@ const CollaborativeReader = () => {
             <span className={`text-xs ${showComments ? 'text-gray-500 font-medium' : 'text-muted-foreground'}`}>Comentarios</span>
           </button>
 
-          <button className="flex flex-col items-center gap-1 p-2">
-            <div className="w-6 h-6 flex items-center justify-center">
-              <Users className="w-4 h-4 text-muted-foreground" />
+          <button 
+            onClick={() => setShowInviteModal(true)}
+            className="flex flex-col items-center gap-1 p-2"
+          >
+            <div className={`w-6 h-6 ${showInviteModal ? 'bg-gray-500' : ''} rounded-full flex items-center justify-center`}>
+              <Users className={`w-4 h-4 ${showInviteModal ? 'text-white' : 'text-muted-foreground'}`} />
             </div>
-            <span className="text-xs text-muted-foreground">Colaborar</span>
+            <span className={`text-xs ${showInviteModal ? 'text-gray-500 font-medium' : 'text-muted-foreground'}`}>Colaborar</span>
           </button>
         </div>
       </div>
-
-      {/* Comment Popup */}
-      <CommentPopup
-        isVisible={showCommentPopup}
-        position={highlightPopupPosition}
-        highlight={selectedHighlight}
-        onAddComment={(comment) => {
-          // Handle comment addition
-        }}
-        currentUserId="current-user"
-        onClose={() => {
-          setShowCommentPopup(false);
-          setSelectedHighlight(null);
-        }}
-      />
 
       {/* Enhanced Comments Panel */}
       <EnhancedCommentsPanel
@@ -1913,6 +1828,7 @@ const CollaborativeReader = () => {
         highlights={highlights}
         currentChapter={currentChapter}
         totalChapters={totalChapters}
+        currentUserId={currentUserId}
         onClose={() => setShowComments(false)}
         onNavigateToHighlight={handleNavigateToHighlight}
         onHighlightClick={(highlight) => {
@@ -1932,322 +1848,16 @@ const CollaborativeReader = () => {
         onDeleteComment={handleDeleteComment}
         onDeleteHighlight={handleDeleteHighlight}
         onChangeHighlightColor={handleChangeHighlightColor}
-        currentUserId="current-user"
+        currentUserId={currentUserId}
+        currentUserName={currentUserName}
         onClose={() => {
           setShowCommentPopup(false);
           setSelectedHighlight(null);
         }}
       />
-      {/* Mobile Header */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-md border-b border-border shadow-sm">
-        <div className="flex items-center justify-between px-4 py-3">
-          <button
-            onClick={() => navigate('/bible')}
-            className="p-2 rounded-full hover:bg-muted transition-colors"
-          >
-            <ChevronLeft className="h-5 w-5 text-foreground" />
-          </button>
 
-          <div className="flex-1 text-center mx-4">
-            <h1 className="font-semibold text-foreground text-sm truncate">{documentData?.name || 'Cargando...'}</h1>
-            {epubBook && epubBook.chapters[currentChapter - 1] && (
-              <p className="text-xs text-muted-foreground truncate">{epubBook.chapters[currentChapter - 1].title}</p>
-            )}
-            {/* Collaborative status */}
-            <div className="flex items-center justify-center gap-1 mt-1">
-              <div className={`w-2 h-2 rounded-full ${isCollaborativeConnected ? 'bg-green-500' : 'bg-gray-400'}`}></div>
-              <span className="text-xs text-muted-foreground">
-                {isCollaborativeConnected ? 'Colaborativo' : 'Desconectado'}
-              </span>
-            </div>
-          </div>
 
-          <div className="flex items-center gap-2">
-            <ThemeToggle className="w-10 h-10" />
-            <button
-              onClick={() => setShowComments(!showComments)}
-              className="p-2 rounded-full hover:bg-muted transition-colors"
-            >
-              <MessageSquare className="h-5 w-5 text-foreground" />
-            </button>
-          </div>
-        </div>
-      </div>
 
-      {/* Desktop Header */}
-      <div className="hidden md:block fixed top-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-md border-b border-border shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => navigate('/bible')}
-                className="p-2 rounded-full hover:bg-muted transition-colors"
-              >
-                <ChevronLeft className="h-5 w-5 text-foreground" />
-              </button>
-              <div>
-                <h1 className="text-xl font-bold text-foreground">{documentData?.name || 'Cargando...'}</h1>
-                {epubBook && epubBook.chapters[currentChapter - 1] && (
-                  <p className="text-sm text-muted-foreground">{epubBook.chapters[currentChapter - 1].title}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <ThemeToggle />
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                <span>{participants.length} lectores conectados</span>
-              </div>
-
-              {/* Progress Indicator */}
-              {epubLoadingProgress.isLoading && (
-                <div className="flex items-center gap-3">
-                  <div className="w-32 bg-blue-100 rounded-full h-1.5">
-                    <div
-                      className="bg-gradient-to-r from-blue-500 to-purple-600 h-1.5 rounded-full transition-all duration-500"
-                      style={{ width: `${epubLoadingProgress.progress}%` }}
-                    ></div>
-                  </div>
-                  <span className="text-xs text-blue-600">{epubLoadingProgress.progress}%</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content Area - Glose Style Layout */}
-      <div className="pt-16 md:pt-20 pb-20 md:pb-8 min-h-screen">
-        <div className="max-w-4xl mx-auto px-4 md:px-8 relative">
-
-          {/* Reading Content - Bible App Style */}
-          <div className="bible-glass-card min-h-[70vh] relative overflow-hidden mb-8">
-            <div className="bible-reading-content">
-
-              {epubBook && useGloseReader ? (
-                <>
-                  <GloseScrollReader
-                    ref={gloseReaderRef}
-                    epubBook={epubBook}
-                    onChapterChange={handleChapterChange}
-                    currentChapter={currentChapter}
-                  />
-                </>
-              ) : (
-                <div className="text-center py-12">
-                  <div className="w-8 h-8 border-2 border-gray-500 border-t-transparent rounded-full mx-auto mb-4 animate-spin"></div>
-                  <p className="text-foreground">
-                    {epubBook ? 'Preparando lector...' : 'Cargando contenido...'}
-                  </p>
-                  {epubBook && (
-                    <p className="text-sm text-muted-foreground mt-2">
-                      Libro: {epubBook.title} ({epubBook.chapters.length} capítulos)
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Navigation Controls - Modern Bible App Style */}
-          <div className="flex justify-center mb-8">
-            <div className="bible-glass-card px-6 py-4 flex items-center gap-6">
-              <button
-                onClick={() => navigateChapter('prev')}
-                disabled={currentChapter <= 1}
-                className="w-10 h-10 rounded-full bg-gray-500/10 hover:bg-gray-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center"
-              >
-                <ChevronLeft className="h-5 w-5 text-foreground" />
-              </button>
-
-              <div className="text-center px-4">
-                <div className="font-semibold text-foreground text-sm">
-                  Capítulo {currentChapter} de {totalChapters}
-                </div>
-                {epubBook && epubBook.chapters[currentChapter - 1] && (
-                  <div className="text-xs text-muted-foreground mt-0.5 truncate max-w-48">
-                    {epubBook.chapters[currentChapter - 1].title}
-                  </div>
-                )}
-                {/* Reading Progress Indicator - Apple Style */}
-                <div className="w-full bg-muted rounded-full h-1.5 mt-3">
-                  <div
-                    className="bg-gray-500 h-1.5 rounded-full transition-all duration-300"
-                    style={{ width: `${(currentChapter / totalChapters) * 100}%` }}
-                  ></div>
-                </div>
-                <div className="text-xs text-muted-foreground mt-2">
-                  {Math.round((currentChapter / totalChapters) * 100)}% completado
-                </div>
-              </div>
-
-              <button
-                onClick={() => navigateChapter('next')}
-                disabled={currentChapter >= totalChapters}
-                className="w-10 h-10 rounded-full bg-gray-500/10 hover:bg-gray-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center"
-              >
-                <ChevronRight className="h-5 w-5 text-foreground" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Floating Action Buttons - Apple Style */}
-      <div className="hidden md:flex fixed right-6 top-1/2 transform -translate-y-1/2 z-40 flex-col gap-3">
-        {documentData?.file_type === 'epub' && (
-          <button
-            onClick={() => setShowTableOfContents(!showTableOfContents)}
-            className={`w-12 h-12 rounded-full shadow-lg backdrop-blur-md border transition-all ${showTableOfContents
-              ? 'bg-gray-500 text-white border-gray-400'
-              : 'bg-card/90 text-foreground border-border hover:bg-card'
-              }`}
-            title="Índice"
-          >
-            <List className="h-5 w-5 mx-auto" />
-          </button>
-        )}
-
-        {/* Highlight Mode Toggle */}
-        <button
-          onClick={() => setIsHighlightMode(!isHighlightMode)}
-          className={`w-12 h-12 rounded-full shadow-lg backdrop-blur-md border transition-all ${isHighlightMode
-            ? 'bg-yellow-500 text-white border-yellow-400'
-            : 'bg-card/90 text-foreground border-border hover:bg-card'
-            }`}
-          title={isHighlightMode ? 'Desactivar highlights' : 'Activar highlights'}
-        >
-          <Highlighter className="h-5 w-5 mx-auto" />
-        </button>
-
-        {/* Test Highlight Button */}
-        <button
-          onClick={() => {
-
-            // Get the first few words from the current chapter
-            const chapterElement = document.querySelector(`[data-chapter="${currentChapter}"]`);
-            if (chapterElement) {
-              const chapterText = chapterElement.textContent || '';
-              const firstWords = chapterText.trim().split(' ').slice(0, 3).join(' '); // First 3 words
-
-              const testHighlight = {
-                id: `test_${Date.now()}`,
-                userId: 'current-user',
-                userName: 'Test User',
-                text: firstWords,
-                color: 'yellow',
-                chapterNumber: currentChapter,
-                textRange: {
-                  startOffset: 0,
-                  endOffset: firstWords.length,
-                  startContainer: `[data-chapter="${currentChapter}"]`,
-                  endContainer: `[data-chapter="${currentChapter}"]`
-                },
-                position: { x: 100, y: 100 },
-                comments: [],
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-              };
-              createCollaborativeHighlight(testHighlight);
-            } else {
-              console.error('🧪 TEST: No chapter element found');
-            }
-          }}
-          className="p-3 rounded-full shadow-lg backdrop-blur-md border bg-red-500 text-white border-red-400 hover:bg-red-600"
-          title="Test Highlight"
-        >
-          🧪
-        </button>
-
-        <button
-          onClick={() => setShowParticipants(!showParticipants)}
-          className={`p-3 rounded-full shadow-lg backdrop-blur-md border transition-all ${showParticipants
-            ? 'bg-green-500 text-white border-green-400'
-            : 'bg-white/90 text-gray-700 border-white/20 hover:bg-white'
-            }`}
-          title="Participantes"
-        >
-          <Users className="h-5 w-5" />
-        </button>
-
-        <button
-          onClick={() => setShowComments(!showComments)}
-          className={`p-3 rounded-full shadow-lg backdrop-blur-md border transition-all ${showComments
-            ? 'bg-purple-500 text-white border-purple-400'
-            : 'bg-white/90 text-gray-700 border-white/20 hover:bg-white'
-            }`}
-          title="Comentarios"
-        >
-          <MessageSquare className="h-5 w-5" />
-        </button>
-
-        <button
-          onClick={() => setShowAuxiliaryContent(!showAuxiliaryContent)}
-          className={`p-3 rounded-full shadow-lg backdrop-blur-md border transition-all ${showAuxiliaryContent
-            ? 'bg-orange-500 text-white border-orange-400'
-            : 'bg-white/90 text-gray-700 border-white/20 hover:bg-white'
-            }`}
-          title={showAuxiliaryContent ? "Ocultar contenido auxiliar (prólogos, índices, etc.)" : "Mostrar todo el contenido (incluye prólogos, índices, etc.)"}
-        >
-          {showAuxiliaryContent ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-        </button>
-
-        <button
-          onClick={() => setIsRecording(!isRecording)}
-          className={`p-3 rounded-full shadow-lg backdrop-blur-md border transition-all ${isRecording
-            ? 'bg-red-500 text-white border-red-400'
-            : 'bg-white/90 text-gray-700 border-white/20 hover:bg-white'
-            }`}
-          title={isRecording ? "Detener grabación" : "Grabar nota de voz"}
-        >
-          {isRecording ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-        </button>
-      </div>
-
-      {/* Mobile Bottom Navigation */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-t border-gray-200 shadow-lg">
-        <div className="flex items-center justify-around py-3">
-          {documentData?.file_type === 'epub' && (
-            <button
-              onClick={() => setShowTableOfContents(!showTableOfContents)}
-              className={`p-3 rounded-full transition-colors ${showTableOfContents ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
-                }`}
-            >
-              <List className="h-5 w-5" />
-            </button>
-          )}
-
-          <button
-            onClick={() => setShowParticipants(!showParticipants)}
-            className={`p-3 rounded-full transition-colors ${showParticipants ? 'bg-green-100 text-green-600' : 'text-gray-600 hover:bg-gray-100'
-              }`}
-          >
-            <Users className="h-5 w-5" />
-          </button>
-
-          <button
-            onClick={() => setShowAuxiliaryContent(!showAuxiliaryContent)}
-            className={`p-3 rounded-full transition-colors ${showAuxiliaryContent ? 'bg-orange-100 text-orange-600' : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            title={showAuxiliaryContent ? "Ocultar contenido auxiliar" : "Mostrar contenido auxiliar"}
-          >
-            {showAuxiliaryContent ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-          </button>
-
-          <button
-            onClick={() => setIsRecording(!isRecording)}
-            className={`p-3 rounded-full transition-colors ${isRecording ? 'bg-red-100 text-red-600' : 'text-gray-600 hover:bg-gray-100'
-              }`}
-          >
-            {isRecording ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-          </button>
-
-          <button className="p-3 rounded-full text-gray-600 hover:bg-gray-100 transition-colors">
-            <Highlighter className="h-5 w-5" />
-          </button>
-        </div>
-      </div>
 
       {/* Floating Panels - Responsive */}
 
@@ -2489,6 +2099,30 @@ const CollaborativeReader = () => {
                   </div>
                 ))}
               </div>
+              
+              {/* Compartir Enlace Section */}
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Invitar Colaboradores</p>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 flex items-center shadow-inner">
+                    <input 
+                      readOnly
+                      value={window.location.href}
+                      className="flex-1 bg-transparent border-none focus:ring-0 text-xs text-gray-600 outline-none truncate"
+                    />
+                  </div>
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(window.location.href);
+                      toast.success('¡Enlace listo para pegar!');
+                    }}
+                    className="bg-green-600 hover:bg-green-700 text-white px-3 py-2.5 rounded-lg flex items-center gap-1.5 font-medium text-xs transition-colors"
+                  >
+                    <Copy className="h-3 w-3" />
+                    Copiar
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -2578,6 +2212,49 @@ const CollaborativeReader = () => {
             >
               ×
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Invite Modal */}
+      {showInviteModal && (
+        <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white max-w-md w-full rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-gray-100">
+              <div className="flex justify-between items-start mb-2">
+                <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center mb-3">
+                  <Users className="h-6 w-6 text-blue-600" />
+                </div>
+                <button onClick={() => setShowInviteModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-full hover:bg-gray-100">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-1">Colaboradores</h3>
+              <p className="text-sm text-gray-500 leading-relaxed">Este es un libro colaborativo. Copia este enlace mágico y envíalo para que tus conocidos puedan leer simultáneamente contigo, debatir y ver tus notas.</p>
+            </div>
+            
+            <div className="p-6 bg-gray-50/50">
+              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">Enlace de lectura</label>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-2.5 flex items-center shadow-sm">
+                  <input 
+                    readOnly
+                    value={window.location.href}
+                    className="flex-1 bg-transparent border-none focus:ring-0 text-sm text-gray-600 outline-none truncate"
+                  />
+                </div>
+                <button 
+                  onClick={() => {
+                    navigator.clipboard.writeText(window.location.href);
+                    toast.success('¡Enlace copiado al portapapeles!');
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg flex items-center gap-2 font-medium text-sm transition-colors shadow-sm"
+                >
+                  <Copy className="h-4 w-4" />
+                  Copiar
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

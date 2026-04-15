@@ -97,6 +97,18 @@ export const highlightAPI = {
   delete: (id: string) => apiCall(`/highlights/${id}/`, { method: 'DELETE' }),
 };
 
+// Book Highlight endpoints (for collaborative reader)
+export const bookHighlightAPI = {
+  getAll: () => apiCall('/book-highlights/', { method: 'GET' }),
+  getById: (id: string) => apiCall(`/book-highlights/${id}/`, { method: 'GET' }),
+  create: (data: any) => apiCall('/book-highlights/', { method: 'POST', body: JSON.stringify(data) }),
+  delete: (id: string) => apiCall(`/book-highlights/${id}/`, { method: 'DELETE' }),
+  addComment: (highlightId: string, data: { text: string; user_name: string }) =>
+    apiCall(`/book-highlights/${highlightId}/add_comment/`, { method: 'POST', body: JSON.stringify(data) }),
+  getComments: (highlightId: string) =>
+    apiCall(`/book-highlights/${highlightId}/comments/`, { method: 'GET' }),
+};
+
 // Devotionals endpoints
 export const devotionalAPI = {
   getAll: () => apiCall('/devotionals/', { method: 'GET' }),

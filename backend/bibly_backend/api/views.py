@@ -245,6 +245,22 @@ class DocumentViewSet(viewsets.ModelViewSet):
         else:
             # If not authenticated, only show public documents
             return Document.objects.filter(is_public=True)
+
+    def retrieve(self, request, *args, **kwargs):
+        """Override retrieve to allow access by specific UUID (capability link pattern) and auto-add collaborators"""
+        try:
+            # Bypass get_queryset filtering to fetch precisely by ID
+            document = Document.objects.get(pk=kwargs['pk'])
+            
+            # If user is authenticated, make them a collaborator automatically upon visitation via the magic UUID link
+            if request.user.is_authenticated and document.owner != request.user and not document.is_public:
+                if not document.collaborators.filter(id=request.user.id).exists():
+                    document.collaborators.add(request.user)
+                    
+            serializer = self.get_serializer(document)
+            return Response(serializer.data)
+        except Document.DoesNotExist:
+            return Response({'detail': 'Document not found.'}, status=status.HTTP_404_NOT_FOUND)
     
     def perform_create(self, serializer):
         # Auto-detect file type and Bible status
@@ -405,8 +421,10 @@ class BookHighlightViewSet(viewsets.ModelViewSet):
         """Add a comment to a book highlight"""
         highlight = self.get_object()
         
+        import uuid
+        comment_id = request.data.get('id') or f"comment_{uuid.uuid4().hex[:12]}"
         comment_data = {
-            'id': f"comment_{request.data.get('id', 'auto')}",
+            'id': comment_id,
             'highlight': highlight.id,
             'user_name': request.data.get('user_name', 'Anonymous'),
             'text': request.data.get('text', '')
@@ -422,6 +440,14 @@ class BookHighlightViewSet(viewsets.ModelViewSet):
             comment = serializer.save(user=highlight.user)
         
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['get'])
+    def comments(self, request, pk=None):
+        """List all comments for a book highlight"""
+        highlight = self.get_object()
+        comments = highlight.comments.all().order_by('created_at')
+        serializer = BookHighlightCommentSerializer(comments, many=True)
+        return Response(serializer.data)
 
 class ReadingProgressViewSet(viewsets.ModelViewSet):
     """ViewSet for managing reading progress - supports both authenticated and anonymous users"""

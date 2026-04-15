@@ -1,8 +1,8 @@
 // External Bible API service
 // API Documentation: https://scripture.api.bible/
 
-const BIBLE_API_BASE_URL = 'https://api.scripture.api.bible/v1';
-const BIBLE_API_KEY = import.meta.env.VITE_BIBLE_API_KEY || 'your-api-key-here';
+const BIBLE_API_BASE_URL = 'https://rest.api.bible/v1';
+const BIBLE_API_KEY = import.meta.env.VITE_BIBLE_API_KEY || 'vKCt8t4me26IIcBQZh22P';
 
 // Bible API interfaces
 interface BibleApiVersion {

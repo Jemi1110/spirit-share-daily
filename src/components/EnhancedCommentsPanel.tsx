@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { MessageSquare, X, Filter, Search, ChevronDown, ChevronRight, Eye } from 'lucide-react';
+import { X, Search, ChevronDown, ChevronRight, Eye, Highlighter, MessageCircle } from 'lucide-react';
 
 interface Comment {
   id: string;
@@ -34,6 +34,7 @@ interface EnhancedCommentsPanelProps {
   highlights: Highlight[];
   currentChapter: number;
   totalChapters: number;
+  currentUserId?: string;
   onClose: () => void;
   onNavigateToHighlight: (highlightId: string, chapterNumber: number) => void;
   onHighlightClick: (highlight: Highlight) => void;
@@ -41,30 +42,48 @@ interface EnhancedCommentsPanelProps {
 
 type FilterType = 'all' | 'current-chapter' | 'my-highlights' | 'with-comments';
 
+const HIGHLIGHT_COLORS: Record<string, string> = {
+  yellow: 'bg-yellow-100 border-yellow-400',
+  green: 'bg-green-100 border-green-400',
+  blue: 'bg-blue-100 border-blue-400',
+  pink: 'bg-pink-100 border-pink-400',
+  purple: 'bg-purple-100 border-purple-400',
+  orange: 'bg-orange-100 border-orange-400',
+};
+
+const COLOR_DOT: Record<string, string> = {
+  yellow: 'bg-yellow-400',
+  green: 'bg-green-400',
+  blue: 'bg-blue-400',
+  pink: 'bg-pink-400',
+  purple: 'bg-purple-400',
+  orange: 'bg-orange-400',
+};
+
 export const EnhancedCommentsPanel: React.FC<EnhancedCommentsPanelProps> = ({
   isVisible,
   highlights,
   currentChapter,
   totalChapters,
+  currentUserId = 'current-user',
   onClose,
   onNavigateToHighlight,
   onHighlightClick
 }) => {
   const [filter, setFilter] = useState<FilterType>('current-chapter');
+  const [viewMode, setViewMode] = useState<'highlights' | 'comments'>('highlights');
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedChapters, setExpandedChapters] = useState<Set<number>>(new Set([currentChapter]));
 
-  // Filter and group highlights
   const filteredHighlights = useMemo(() => {
     let filtered = highlights;
 
-    // Apply filters
     switch (filter) {
       case 'current-chapter':
         filtered = highlights.filter(h => h.chapterNumber === currentChapter);
         break;
       case 'my-highlights':
-        filtered = highlights.filter(h => h.userId === 'current-user');
+        filtered = highlights.filter(h => h.userId === currentUserId || h.userName === currentUserId);
         break;
       case 'with-comments':
         filtered = highlights.filter(h => h.comments.length > 0);
@@ -73,26 +92,22 @@ export const EnhancedCommentsPanel: React.FC<EnhancedCommentsPanelProps> = ({
         filtered = highlights;
     }
 
-    // Apply search
     if (searchTerm) {
-      filtered = filtered.filter(h => 
-        h.text.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        h.comments.some(c => c.content?.toLowerCase().includes(searchTerm.toLowerCase()))
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(h =>
+        h.text.toLowerCase().includes(term) ||
+        h.comments.some(c => c.content?.toLowerCase().includes(term))
       );
     }
 
-    // Group by chapter
     const grouped = filtered.reduce((acc, highlight) => {
-      if (!acc[highlight.chapterNumber]) {
-        acc[highlight.chapterNumber] = [];
-      }
+      if (!acc[highlight.chapterNumber]) acc[highlight.chapterNumber] = [];
       acc[highlight.chapterNumber].push(highlight);
       return acc;
     }, {} as Record<number, Highlight[]>);
 
-    // Sort highlights within each chapter by creation time
-    Object.keys(grouped).forEach(chapterNum => {
-      grouped[parseInt(chapterNum)].sort((a, b) => 
+    Object.keys(grouped).forEach(n => {
+      grouped[parseInt(n)].sort((a, b) =>
         new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
       );
     });
@@ -100,104 +115,125 @@ export const EnhancedCommentsPanel: React.FC<EnhancedCommentsPanelProps> = ({
     return grouped;
   }, [highlights, filter, searchTerm, currentChapter]);
 
-  const toggleChapterExpansion = (chapterNumber: number) => {
+  const toggleChapter = (n: number) => {
     setExpandedChapters(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(chapterNumber)) {
-        newSet.delete(chapterNumber);
-      } else {
-        newSet.add(chapterNumber);
-      }
-      return newSet;
+      const s = new Set(prev);
+      s.has(n) ? s.delete(n) : s.add(n);
+      return s;
     });
   };
 
-  const formatTimestamp = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    
-    if (diffMins < 1) return 'Ahora';
-    if (diffMins < 60) return `${diffMins}m`;
-    if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h`;
-    return date.toLocaleDateString();
+  const fmt = (ts: string) => {
+    const diff = Math.floor((Date.now() - new Date(ts).getTime()) / 60000);
+    if (diff < 1) return 'Ahora';
+    if (diff < 60) return `${diff}m`;
+    if (diff < 1440) return `${Math.floor(diff / 60)}h`;
+    return new Date(ts).toLocaleDateString();
   };
 
-  const getHighlightColorClass = (color: string) => {
-    const colorMap = {
-      yellow: 'bg-yellow-100 border-yellow-300',
-      green: 'bg-green-100 border-green-300',
-      blue: 'bg-blue-100 border-blue-300',
-      pink: 'bg-pink-100 border-pink-300',
-      purple: 'bg-purple-100 border-purple-300',
-      orange: 'bg-orange-100 border-orange-300'
-    };
-    return colorMap[color as keyof typeof colorMap] || 'bg-gray-100 border-gray-300';
-  };
-
-  const totalHighlights = highlights.length;
-  const totalComments = highlights.reduce((sum, h) => sum + h.comments.length, 0);
+  const totalH = highlights.length;
+  const totalC = highlights.reduce((s, h) => s + h.comments.length, 0);
 
   if (!isVisible) return null;
 
+  const colorCls = (c: string) => HIGHLIGHT_COLORS[c] || 'bg-gray-100 border-gray-400';
+  const dotCls = (c: string) => COLOR_DOT[c] || 'bg-gray-400';
+
+  const filters: { key: FilterType; label: string }[] = [
+    { key: 'current-chapter', label: 'Cap. actual' },
+    { key: 'all', label: 'Todos' },
+    { key: 'my-highlights', label: 'Míos' },
+    ...(viewMode === 'comments' ? [{ key: 'with-comments' as FilterType, label: 'Con comentarios' }] : []),
+  ];
+
   return (
-    <div className="fixed inset-0 z-50 md:inset-auto md:top-20 md:right-6 md:w-96 md:max-h-[80vh]">
-      {/* Mobile Overlay */}
-      <div className="md:hidden absolute inset-0 bg-black/50" onClick={onClose}></div>
-      
-      {/* Panel Content */}
-      <div className="absolute bottom-0 left-0 right-0 md:relative md:bottom-auto bg-white rounded-t-2xl md:rounded-2xl shadow-2xl max-h-[85vh] md:max-h-full overflow-hidden flex flex-col">
-        
-        {/* Header */}
-        <div className="p-4 border-b border-gray-200 bg-gray-50">
+    <>
+      {/* Backdrop - mobile full overlay, desktop click-away */}
+      <div
+        className="fixed inset-0 z-[60] bg-black/40 md:bg-transparent"
+        onClick={onClose}
+      />
+
+      {/* Panel */}
+      <div className="fixed z-[61] inset-x-0 bottom-0 md:inset-auto md:top-4 md:right-4 md:bottom-4 md:w-[380px] flex flex-col bg-white rounded-t-2xl md:rounded-2xl shadow-2xl border border-gray-200 max-h-[88vh] md:max-h-[calc(100vh-2rem)]">
+
+        {/* ─── HEADER (fixed, never scrolls) ─── */}
+        <div className="flex-shrink-0 px-4 pt-4 pb-3 border-b border-gray-100">
+          {/* Title row */}
           <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
-                <MessageSquare className="h-5 w-5 text-white" />
+            <div className="flex items-center gap-2.5">
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
+                viewMode === 'highlights'
+                  ? 'bg-gradient-to-br from-yellow-400 to-orange-500'
+                  : 'bg-gradient-to-br from-purple-500 to-pink-500'
+              }`}>
+                {viewMode === 'highlights'
+                  ? <Highlighter className="h-4 w-4 text-white" />
+                  : <MessageCircle className="h-4 w-4 text-white" />
+                }
               </div>
               <div>
-                <h3 className="font-semibold text-gray-900">Highlights & Comentarios</h3>
-                <p className="text-sm text-gray-500">
-                  {totalHighlights} highlights • {totalComments} comentarios
-                </p>
+                <h3 className="text-sm font-semibold text-gray-900 leading-tight">
+                  {viewMode === 'highlights' ? 'Highlights' : 'Comentarios'}
+                </h3>
+                <p className="text-xs text-gray-400">{totalH} highlights · {totalC} comentarios</p>
               </div>
             </div>
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+              <X className="h-4 w-4 text-gray-500" />
+            </button>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex bg-gray-100 rounded-lg p-0.5 mb-3">
             <button
-              onClick={onClose}
-              className="p-2 rounded-full hover:bg-gray-200 transition-colors"
+              onClick={() => setViewMode('highlights')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-medium transition-all ${
+                viewMode === 'highlights'
+                  ? 'bg-white text-yellow-700 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
             >
-              <X className="h-4 w-4 text-gray-600" />
+              <Highlighter className="h-3.5 w-3.5" />
+              Highlights ({totalH})
+            </button>
+            <button
+              onClick={() => setViewMode('comments')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-medium transition-all ${
+                viewMode === 'comments'
+                  ? 'bg-white text-purple-700 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <MessageCircle className="h-3.5 w-3.5" />
+              Comentarios ({totalC})
             </button>
           </div>
 
           {/* Search */}
-          <div className="relative mb-3">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <div className="relative mb-2">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
             <input
               type="text"
-              placeholder="Buscar highlights o comentarios..."
+              placeholder={viewMode === 'highlights' ? 'Buscar highlights...' : 'Buscar comentarios...'}
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:ring-1 focus:ring-purple-400 focus:border-purple-400 outline-none"
             />
           </div>
 
           {/* Filters */}
-          <div className="flex gap-2 overflow-x-auto">
-            {[
-              { key: 'current-chapter', label: 'Capítulo actual' },
-              { key: 'all', label: 'Todos' },
-              { key: 'my-highlights', label: 'Mis highlights' },
-              { key: 'with-comments', label: 'Con comentarios' }
-            ].map(({ key, label }) => (
+          <div className="flex gap-1.5 overflow-x-auto pb-0.5 -mx-1 px-1">
+            {filters.map(({ key, label }) => (
               <button
                 key={key}
-                onClick={() => setFilter(key as FilterType)}
-                className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                onClick={() => setFilter(key)}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-medium whitespace-nowrap transition-colors ${
                   filter === key
-                    ? 'bg-purple-100 text-purple-700'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    ? viewMode === 'highlights'
+                      ? 'bg-yellow-100 text-yellow-800 ring-1 ring-yellow-300'
+                      : 'bg-purple-100 text-purple-800 ring-1 ring-purple-300'
+                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                 }`}
               >
                 {label}
@@ -206,115 +242,194 @@ export const EnhancedCommentsPanel: React.FC<EnhancedCommentsPanelProps> = ({
           </div>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto">
+        {/* ─── SCROLLABLE CONTENT ─── */}
+        <div className="flex-1 overflow-y-auto overscroll-contain min-h-0">
           {Object.keys(filteredHighlights).length === 0 ? (
-            <div className="text-center py-12">
-              <MessageSquare className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-500 font-medium">No hay highlights</p>
-              <p className="text-gray-400 text-sm">
-                {searchTerm ? 'Intenta con otros términos de búsqueda' : 'Selecciona texto para crear highlights'}
-              </p>
+            <div className="flex flex-col items-center justify-center py-16 px-4">
+              {viewMode === 'highlights' ? (
+                <>
+                  <div className="w-12 h-12 rounded-full bg-yellow-50 flex items-center justify-center mb-3">
+                    <Highlighter className="h-6 w-6 text-yellow-300" />
+                  </div>
+                  <p className="text-sm text-gray-500 font-medium">No hay highlights</p>
+                  <p className="text-xs text-gray-400 mt-1 text-center">
+                    {searchTerm ? 'Sin resultados' : 'Selecciona texto para resaltar'}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="w-12 h-12 rounded-full bg-purple-50 flex items-center justify-center mb-3">
+                    <MessageCircle className="h-6 w-6 text-purple-300" />
+                  </div>
+                  <p className="text-sm text-gray-500 font-medium">No hay comentarios</p>
+                  <p className="text-xs text-gray-400 mt-1 text-center">
+                    {searchTerm ? 'Sin resultados' : 'Comenta en tus highlights'}
+                  </p>
+                </>
+              )}
             </div>
-          ) : (
-            <div className="p-4 space-y-4">
+          ) : viewMode === 'highlights' ? (
+            /* ═══════ HIGHLIGHTS VIEW ═══════ */
+            <div className="p-2 space-y-1.5">
               {Object.entries(filteredHighlights)
                 .sort(([a], [b]) => parseInt(a) - parseInt(b))
-                .map(([chapterNum, chapterHighlights]) => {
-                  const chapterNumber = parseInt(chapterNum);
-                  const isExpanded = expandedChapters.has(chapterNumber);
-                  
+                .map(([chapterNum, items]) => {
+                  const n = parseInt(chapterNum);
+                  const open = expandedChapters.has(n);
+
                   return (
-                    <div key={chapterNumber} className="border border-gray-200 rounded-lg overflow-hidden">
-                      {/* Chapter Header */}
+                    <div key={n}>
+                      {/* Chapter toggle */}
                       <button
-                        onClick={() => toggleChapterExpansion(chapterNumber)}
-                        className="w-full px-4 py-3 bg-gray-50 hover:bg-gray-100 flex items-center justify-between transition-colors"
+                        onClick={() => toggleChapter(n)}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-yellow-50/60 transition-colors"
                       >
-                        <div className="flex items-center gap-2">
-                          {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                          <span className="font-medium text-gray-800">
-                            Capítulo {chapterNumber}
-                          </span>
-                          <span className="text-sm text-gray-500">
-                            ({chapterHighlights.length} highlights)
-                          </span>
-                        </div>
-                        {chapterNumber === currentChapter && (
-                          <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full">
+                        {open
+                          ? <ChevronDown size={14} className="text-yellow-600 flex-shrink-0" />
+                          : <ChevronRight size={14} className="text-yellow-600 flex-shrink-0" />
+                        }
+                        <span className="text-xs font-semibold text-gray-700">Cap. {n}</span>
+                        <span className="ml-auto text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded-full font-medium">
+                          {items.length}
+                        </span>
+                        {n === currentChapter && (
+                          <span className="text-[10px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full font-medium">
                             Actual
                           </span>
                         )}
                       </button>
 
-                      {/* Chapter Highlights */}
-                      {isExpanded && (
-                        <div className="divide-y divide-gray-100">
-                          {chapterHighlights.map((highlight) => (
-                            <div key={highlight.id} className="p-4 hover:bg-gray-50 transition-colors">
-                              {/* Highlight Header */}
-                              <div className="flex items-start justify-between mb-2">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center">
-                                    <span className="text-xs font-medium text-purple-600">
-                                      {highlight.userName.charAt(0).toUpperCase()}
-                                    </span>
-                                  </div>
-                                  <span className="text-sm font-medium text-gray-800">
-                                    {highlight.userName}
-                                  </span>
-                                  <span className="text-xs text-gray-500">
-                                    {formatTimestamp(highlight.createdAt)}
-                                  </span>
+                      {/* Expanded items */}
+                      {open && (
+                        <div className="ml-2 space-y-1 mt-0.5 mb-2">
+                          {items.map(hl => (
+                            <div
+                              key={hl.id}
+                              className="group rounded-lg border border-gray-100 bg-white hover:border-gray-200 transition-all"
+                            >
+                              {/* Highlight card */}
+                              <div className="p-2.5">
+                                {/* Meta row */}
+                                <div className="flex items-center gap-1.5 mb-1.5">
+                                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${dotCls(hl.color)}`} />
+                                  <span className="text-[11px] font-medium text-gray-600 truncate">{hl.userName}</span>
+                                  <span className="text-[10px] text-gray-400 ml-auto flex-shrink-0">{fmt(hl.createdAt)}</span>
+                                  <button
+                                    onClick={() => onNavigateToHighlight(hl.id, n)}
+                                    className="p-1 text-gray-300 hover:text-blue-500 transition-colors flex-shrink-0"
+                                    title="Ir al texto"
+                                  >
+                                    <Eye size={12} />
+                                  </button>
                                 </div>
-                                <button
-                                  onClick={() => onNavigateToHighlight(highlight.id, chapterNumber)}
-                                  className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
-                                  title="Ver en texto"
+
+                                {/* Quoted text */}
+                                <div
+                                  onClick={() => onHighlightClick(hl)}
+                                  className={`px-2.5 py-2 rounded-md border-l-[3px] cursor-pointer ${colorCls(hl.color)}`}
                                 >
-                                  <Eye size={14} />
-                                </button>
-                              </div>
+                                  <p className="text-[12px] text-gray-700 leading-relaxed line-clamp-2">
+                                    "{hl.text}"
+                                  </p>
+                                </div>
 
-                              {/* Highlight Text */}
+                                {/* Comment count link */}
+                                {hl.comments.length > 0 && (
+                                  <button
+                                    onClick={() => setViewMode('comments')}
+                                    className="mt-1.5 flex items-center gap-1 text-[11px] text-purple-500 hover:text-purple-700 font-medium"
+                                  >
+                                    <MessageCircle className="h-3 w-3" />
+                                    {hl.comments.length} comentario{hl.comments.length !== 1 ? 's' : ''}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          ) : (
+            /* ═══════ COMMENTS VIEW ═══════ */
+            <div className="p-2 space-y-1.5">
+              {Object.entries(filteredHighlights)
+                .sort(([a], [b]) => parseInt(a) - parseInt(b))
+                .map(([chapterNum, items]) => {
+                  const n = parseInt(chapterNum);
+                  const open = expandedChapters.has(n);
+                  const commentCount = items.reduce((s, h) => s + h.comments.length, 0);
+
+                  return (
+                    <div key={n}>
+                      {/* Chapter toggle */}
+                      <button
+                        onClick={() => toggleChapter(n)}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-purple-50/60 transition-colors"
+                      >
+                        {open
+                          ? <ChevronDown size={14} className="text-purple-600 flex-shrink-0" />
+                          : <ChevronRight size={14} className="text-purple-600 flex-shrink-0" />
+                        }
+                        <span className="text-xs font-semibold text-gray-700">Cap. {n}</span>
+                        <span className="ml-auto text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-medium">
+                          {commentCount}
+                        </span>
+                        {n === currentChapter && (
+                          <span className="text-[10px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full font-medium">
+                            Actual
+                          </span>
+                        )}
+                      </button>
+
+                      {/* Expanded items */}
+                      {open && (
+                        <div className="ml-2 space-y-2 mt-0.5 mb-2">
+                          {items.map(hl => (
+                            <div key={hl.id} className="rounded-lg border border-gray-100 bg-white overflow-hidden">
+                              {/* Reference highlight (slim) */}
                               <div
-                                className={`p-3 rounded-lg border-l-4 cursor-pointer transition-all hover:shadow-sm ${getHighlightColorClass(highlight.color)}`}
-                                onClick={() => onHighlightClick(highlight)}
+                                onClick={() => onNavigateToHighlight(hl.id, n)}
+                                className={`px-3 py-1.5 border-l-[3px] cursor-pointer flex items-center gap-2 ${colorCls(hl.color)}`}
                               >
-                                <p className="text-sm text-gray-800 line-clamp-3">
-                                  "{highlight.text}"
+                                <p className="text-[11px] text-gray-600 line-clamp-1 italic flex-1 min-w-0">
+                                  "{hl.text}"
                                 </p>
+                                <Eye size={11} className="text-gray-400 flex-shrink-0" />
                               </div>
 
-                              {/* Comments */}
-                              {highlight.comments.length > 0 && (
-                                <div className="mt-3 space-y-2">
-                                  {highlight.comments.slice(0, 2).map((comment) => (
-                                    <div key={comment.id} className="bg-gray-50 rounded-lg p-3">
-                                      <div className="flex items-center gap-2 mb-1">
-                                        <span className="text-xs font-medium text-gray-700">
-                                          {comment.userName}
-                                        </span>
-                                        <span className="text-xs text-gray-500">
-                                          {formatTimestamp(comment.timestamp)}
+                              {/* Comments list */}
+                              {hl.comments.length > 0 ? (
+                                <div className="px-3 py-2 space-y-2 bg-gray-50/50">
+                                  {hl.comments.map(c => (
+                                    <div key={c.id} className="flex gap-2">
+                                      {/* Avatar */}
+                                      <div className="w-6 h-6 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                        <span className="text-[10px] font-bold text-purple-600">
+                                          {c.userName.charAt(0).toUpperCase()}
                                         </span>
                                       </div>
-                                      {comment.type === 'text' && comment.content && (
-                                        <p className="text-sm text-gray-700">{comment.content}</p>
-                                      )}
-                                      {comment.type === 'emoji' && comment.emoji && (
-                                        <span className="text-lg">{comment.emoji}</span>
-                                      )}
+                                      {/* Body */}
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-baseline gap-1.5">
+                                          <span className="text-[11px] font-semibold text-gray-700">{c.userName}</span>
+                                          <span className="text-[10px] text-gray-400">{fmt(c.timestamp)}</span>
+                                        </div>
+                                        {c.type === 'text' && c.content && (
+                                          <p className="text-[12px] text-gray-600 leading-relaxed mt-0.5">{c.content}</p>
+                                        )}
+                                        {c.type === 'emoji' && c.emoji && (
+                                          <span className="text-base">{c.emoji}</span>
+                                        )}
+                                      </div>
                                     </div>
                                   ))}
-                                  {highlight.comments.length > 2 && (
-                                    <button
-                                      onClick={() => onHighlightClick(highlight)}
-                                      className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-                                    >
-                                      Ver {highlight.comments.length - 2} comentarios más...
-                                    </button>
-                                  )}
+                                </div>
+                              ) : (
+                                <div className="px-3 py-2">
+                                  <p className="text-[11px] text-gray-400 italic">Sin comentarios</p>
                                 </div>
                               )}
                             </div>
@@ -328,6 +443,6 @@ export const EnhancedCommentsPanel: React.FC<EnhancedCommentsPanelProps> = ({
           )}
         </div>
       </div>
-    </div>
+    </>
   );
 };

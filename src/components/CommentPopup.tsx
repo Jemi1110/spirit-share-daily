@@ -46,6 +46,7 @@ interface CommentPopupProps {
   onChangeHighlightColor?: (highlightId: string, newColor: string) => void;
   onClose: () => void;
   currentUserId?: string;
+  currentUserName?: string;
 }
 
 const HIGHLIGHT_COLORS = {
@@ -67,7 +68,8 @@ export const CommentPopup: React.FC<CommentPopupProps> = ({
   onDeleteHighlight,
   onChangeHighlightColor,
   onClose,
-  currentUserId = 'current-user'
+  currentUserId = 'current-user',
+  currentUserName = 'Usuario'
 }) => {
   const [commentType, setCommentType] = useState<'text' | 'audio' | 'emoji'>('text');
   const [textComment, setTextComment] = useState('');
@@ -141,8 +143,8 @@ export const CommentPopup: React.FC<CommentPopupProps> = ({
 
     onAddComment(highlight.id, {
       highlightId: highlight.id,
-      userId: 'current-user',
-      userName: 'Current User',
+      userId: currentUserId,
+      userName: currentUserName,
       content: textComment.trim(),
       type: 'text',
       chapterNumber: highlight.chapterNumber,
@@ -159,7 +161,7 @@ export const CommentPopup: React.FC<CommentPopupProps> = ({
     onAddComment(highlight.id, {
       highlightId: highlight.id,
       userId: currentUserId,
-      userName: 'Current User',
+      userName: currentUserName,
       emoji,
       type: 'emoji',
       chapterNumber: highlight.chapterNumber,

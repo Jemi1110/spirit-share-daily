@@ -23,13 +23,14 @@ interface Highlight {
 interface HighlightRendererProps {
   highlights: Highlight[];
   onHighlightClick: (highlight: Highlight, event: MouseEvent) => void;
-  currentChapter: number;
+  currentChapter?: number; // Kept for compatibility but ignored for rendering cycles
 }
+
+import { restoreRangeByOffset } from '../utils/highlightUtils';
 
 export const HighlightRenderer: React.FC<HighlightRendererProps> = ({
   highlights,
-  onHighlightClick,
-  currentChapter
+  onHighlightClick
 }) => {
   const renderedHighlightsRef = useRef<Set<string>>(new Set());
 
@@ -42,19 +43,18 @@ export const HighlightRenderer: React.FC<HighlightRendererProps> = ({
     span.dataset.chapterNumber = highlight.chapterNumber.toString();
     span.title = `Highlight by ${highlight.userName}`;
     
-    // Let CSS handle the styling, but add some fallback inline styles for visibility
+    // Fallback inline styles
     span.style.cursor = 'pointer';
     span.style.position = 'relative';
     span.style.zIndex = '1';
     
-    // Add click handler
+    // Click handler
     span.addEventListener('click', (event) => {
       event.preventDefault();
       event.stopPropagation();
       onHighlightClick(highlight, event as any);
     });
 
-    // Add hover effects
     span.addEventListener('mouseenter', () => {
       span.style.opacity = '0.8';
     });
@@ -66,186 +66,150 @@ export const HighlightRenderer: React.FC<HighlightRendererProps> = ({
     return span;
   }, [onHighlightClick]);
 
-  const findTextNodeAndOffset = useCallback((container: Element, offset: number): { node: Text; offset: number } | null => {
-    let currentOffset = 0;
-    const walker = document.createTreeWalker(
-      container,
-      NodeFilter.SHOW_TEXT,
-      null
-    );
-
-    let node = walker.nextNode() as Text;
-    while (node) {
-      const nodeLength = node.textContent?.length || 0;
-      if (currentOffset + nodeLength >= offset) {
-        return {
-          node,
-          offset: offset - currentOffset
-        };
+  const removeHighlightSpan = useCallback((id: string) => {
+    // Finds and safely unwraps highlight boundaries to preserve original DOM markup tags
+    const spans = document.querySelectorAll(`.glose-highlight[data-highlight-id="${id}"]`);
+    spans.forEach(span => {
+      const parent = span.parentNode;
+      if (parent) {
+        const fragment = document.createDocumentFragment();
+        while (span.firstChild) {
+          fragment.appendChild(span.firstChild);
+        }
+        parent.replaceChild(fragment, span);
       }
-      currentOffset += nodeLength;
-      node = walker.nextNode() as Text;
-    }
-
-    return null;
+    });
+    renderedHighlightsRef.current.delete(id);
   }, []);
 
   const recreateRangeFromHighlight = useCallback((highlight: Highlight, chapterElement: Element): Range | null => {
-    try {
-      // Simple approach: try to find the text directly in the chapter
-      const chapterText = chapterElement.textContent || '';
-      const textIndex = chapterText.indexOf(highlight.text);
-      
-      if (textIndex === -1) {
-        return null;
-      }
-
-      // Find the text node and offset using the simple approach
-      return findTextInChapter(chapterElement, highlight.text);
-    } catch (error) {
-      return null;
-    }
-  }, []);
-
-  const findTextInChapter = useCallback((chapterElement: Element, text: string): Range | null => {
-    // Use TreeWalker to find text nodes
-    const walker = document.createTreeWalker(
-      chapterElement,
-      NodeFilter.SHOW_TEXT,
-      null
-    );
-
-    let currentNode = walker.nextNode() as Text;
-    let accumulatedText = '';
-    let startNode: Text | null = null;
-    let startOffset = 0;
-    let endNode: Text | null = null;
-    let endOffset = 0;
-
-    while (currentNode) {
-      const nodeText = currentNode.textContent || '';
-      const beforeLength = accumulatedText.length;
-      accumulatedText += nodeText;
-
-      // Check if our target text starts in this node
-      const targetIndex = accumulatedText.indexOf(text);
-      if (targetIndex !== -1 && targetIndex >= beforeLength) {
-        // Text starts in this node
-        startNode = currentNode;
-        startOffset = targetIndex - beforeLength;
-        
-        // Check if text also ends in this node
-        if (targetIndex + text.length <= accumulatedText.length) {
-          endNode = currentNode;
-          endOffset = startOffset + text.length;
-          break;
-        }
-      }
-      
-      // Check if we found the start and now need to find the end
-      if (startNode && targetIndex !== -1 && targetIndex + text.length <= accumulatedText.length) {
-        endNode = currentNode;
-        endOffset = (targetIndex + text.length) - beforeLength;
-        break;
-      }
-
-      currentNode = walker.nextNode() as Text;
-    }
-
-    if (!startNode || !endNode) {
-      return null;
-    }
-
-    const range = document.createRange();
-    range.setStart(startNode, startOffset);
-    range.setEnd(endNode, endOffset);
-
-    return range;
+    return restoreRangeByOffset(chapterElement, highlight.textRange.startOffset, highlight.textRange.endOffset);
   }, []);
 
   const renderHighlight = useCallback((highlight: Highlight) => {
-    // Skip if already rendered
-    if (renderedHighlightsRef.current.has(highlight.id)) {
-      return;
-    }
+    if (renderedHighlightsRef.current.has(highlight.id)) return;
 
-    // Find the chapter element for this highlight
+    // Check if the target chapter container exists in the viewport / progressive load
     const chapterElement = document.querySelector(`[data-chapter="${highlight.chapterNumber}"]`);
-    if (!chapterElement) {
-      return;
-    }
+    if (!chapterElement) return; // Wait until loaded
 
     const range = recreateRangeFromHighlight(highlight, chapterElement);
-    if (!range) {
-      return;
-    }
+    if (!range) return;
 
     try {
-      const span = createHighlightSpan(highlight);
+      // Find all text nodes within the range dynamically
+      const walker = document.createTreeWalker(
+        range.commonAncestorContainer,
+        NodeFilter.SHOW_TEXT,
+        {
+          acceptNode: function(node) {
+            return range.intersectsNode(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+          }
+        }
+      );
       
-      // Handle simple case where range doesn't cross element boundaries
-      if (range.startContainer === range.endContainer) {
-        range.surroundContents(span);
+      const nodesToWrap: Text[] = [];
+      let currentNode = walker.nextNode() as Text;
+      
+      // If commonAncestorContainer is a text node itself, tree walker might skip it if we start from it without including root?
+      // Actually, if commonAncestorContainer is Text, walker yields it as root if we use the right walker, but let's just check it.
+      if (range.commonAncestorContainer.nodeType === Node.TEXT_NODE) {
+        nodesToWrap.push(range.commonAncestorContainer as Text);
       } else {
-        // Handle complex case where range crosses multiple elements
-        const contents = range.extractContents();
-        span.appendChild(contents);
-        range.insertNode(span);
+        while (currentNode) {
+          nodesToWrap.push(currentNode);
+          currentNode = walker.nextNode() as Text;
+        }
       }
 
+      if (nodesToWrap.length === 0) return;
+
+      // Wrap each text node's selected portion individually (guaranteed to not break DOM or CSS)
+      nodesToWrap.forEach(textNode => {
+        const span = createHighlightSpan(highlight);
+        const wrapRange = document.createRange();
+        
+        if (textNode === range.startContainer && textNode === range.endContainer) {
+          wrapRange.setStart(textNode, range.startOffset);
+          wrapRange.setEnd(textNode, range.endOffset);
+        } else if (textNode === range.startContainer) {
+          wrapRange.setStart(textNode, range.startOffset);
+          wrapRange.setEnd(textNode, textNode.length);
+        } else if (textNode === range.endContainer) {
+          wrapRange.setStart(textNode, 0);
+          wrapRange.setEnd(textNode, range.endOffset);
+        } else {
+          wrapRange.selectNodeContents(textNode);
+        }
+        
+        // Skip empty ranges
+        if (wrapRange.toString().length === 0) return;
+
+        wrapRange.surroundContents(span);
+      });
+      
       renderedHighlightsRef.current.add(highlight.id);
     } catch (error) {
-      // Fallback: try to find and highlight the text manually
-      try {
-        const fallbackRange = findTextInChapter(chapterElement, highlight.text);
-        if (fallbackRange) {
-          const span = createHighlightSpan(highlight);
-          fallbackRange.surroundContents(span);
-          renderedHighlightsRef.current.add(highlight.id);
-        }
-      } catch (fallbackError) {
-        // Silent fail
-      }
+       console.warn(`Highlight extraction skipped due to incompatible elements wrap logic for HTML. Offset limits hit.`, error);
     }
-  }, [currentChapter, createHighlightSpan, recreateRangeFromHighlight, findTextInChapter]);
+  }, [createHighlightSpan, recreateRangeFromHighlight]);
 
-  const clearRenderedHighlights = useCallback(() => {
-    // Remove all existing highlight spans
-    const existingHighlights = document.querySelectorAll('.glose-highlight');
-    existingHighlights.forEach(span => {
-      const parent = span.parentNode;
-      if (parent) {
-        // Move the text content back to the parent and remove the span
-        while (span.firstChild) {
-          parent.insertBefore(span.firstChild, span);
-        }
-        parent.removeChild(span);
+  // Main sync effect completely decoupled from 'currentChapter' scroll limits
+  useEffect(() => {
+    // 1. Differentiate and Delete Removed Highlights
+    const highlightIds = new Set(highlights.map(h => h.id));
+    const renderedArray = Array.from(renderedHighlightsRef.current);
+    
+    renderedArray.forEach(id => {
+      if (!highlightIds.has(id)) {
+        removeHighlightSpan(id);
       }
     });
 
-    renderedHighlightsRef.current.clear();
-  }, []);
-
-  // Render highlights when they change or chapter changes
-  useEffect(() => {
-    // Clear existing highlights
-    clearRenderedHighlights();
-
-    // Small delay to ensure DOM is ready
-    setTimeout(() => {
+    // 2. Render procedure for new components
+    const triggerRenderHighlights = () => {
       highlights.forEach(highlight => {
-        renderHighlight(highlight);
+        // The container might have been completely re-rendered by React, destroying our <span> injections.
+        // We must check if the span physically exists in the DOM, rather than relying solely on our ref memory.
+        const stillInDOM = document.querySelector(`.glose-highlight[data-highlight-id="${highlight.id}"]`);
+        
+        if (!stillInDOM) {
+           renderedHighlightsRef.current.delete(highlight.id); // Clear false memory
+           renderHighlight(highlight);
+        }
       });
-    }, 100);
-  }, [highlights, currentChapter, renderHighlight, clearRenderedHighlights]);
+    };
 
-  // Cleanup on unmount
+    triggerRenderHighlights();
+
+    // 3. Attach standard DOM observer globally to automatically hook elements on dynamic infinite scroll
+    const observer = new MutationObserver((mutations) => {
+      let isLayoutChanged = false;
+      mutations.forEach(mutation => {
+        if (mutation.addedNodes.length > 0) isLayoutChanged = true;
+      });
+      
+      if (isLayoutChanged) {
+        // Small wait to ensure React DOM hydration finished 
+        setTimeout(triggerRenderHighlights, 150);
+      }
+    });
+
+    const targetNode = document.querySelector('[data-glose-container]') || document.body;
+    observer.observe(targetNode, { childList: true, subtree: true });
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [highlights, renderHighlight, removeHighlightSpan]);
+
+  // Global unmount cleanup
   useEffect(() => {
     return () => {
-      clearRenderedHighlights();
+      const allIds = Array.from(renderedHighlightsRef.current);
+      allIds.forEach(id => removeHighlightSpan(id));
     };
-  }, [clearRenderedHighlights]);
+  }, [removeHighlightSpan]);
 
-  // This component doesn't render anything visible, it manipulates the DOM directly
   return null;
 };
