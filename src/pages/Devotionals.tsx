@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, BookOpen, Edit2, Trash2, Save, X, Eye } from "lucide-react";
+import { Plus, BookOpen, Edit2, Trash2, Save, X, Eye, Loader2 } from "lucide-react";
 import { devotionalAPI } from "@/services/api";
 import { toast } from "sonner";
 
@@ -41,8 +41,7 @@ const Devotionals = () => {
       const data = await devotionalAPI.getAll();
       setDevotionals(data as Devotional[]);
     } catch (error) {
-      console.error('Error loading devotionals:', error);
-      toast.error('Failed to load devotionals');
+      toast.error("No se pudieron cargar los devocionales");
     } finally {
       setLoading(false);
     }
@@ -50,35 +49,31 @@ const Devotionals = () => {
 
   const handleCreateDevotional = async () => {
     if (!newDevotional.title.trim() || !newDevotional.content.trim()) {
-      toast.error('Please fill in all fields');
+      toast.error("Por favor completa todos los campos");
       return;
     }
-
     setSubmitting(true);
     try {
       await devotionalAPI.create(newDevotional);
       setNewDevotional({ title: "", content: "" });
       setIsDialogOpen(false);
-      toast.success('Devotional created successfully!');
+      toast.success("¡Devocional creado!");
       loadDevotionals();
     } catch (error) {
-      console.error('Error creating devotional:', error);
-      toast.error('Failed to create devotional');
+      toast.error("No se pudo crear el devocional");
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDeleteDevotional = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this devotional?')) return;
-
+    if (!confirm("¿Eliminar este devocional?")) return;
     try {
       await devotionalAPI.delete(id);
-      toast.success('Devotional deleted successfully!');
+      toast.success("Devocional eliminado");
       loadDevotionals();
     } catch (error) {
-      console.error('Error deleting devotional:', error);
-      toast.error('Failed to delete devotional');
+      toast.error("No se pudo eliminar");
     }
   };
 
@@ -94,31 +89,33 @@ const Devotionals = () => {
 
   const handleUpdateDevotional = async (id: string) => {
     if (!editForm.title.trim() || !editForm.content.trim()) {
-      toast.error('Please fill in all fields');
+      toast.error("Por favor completa todos los campos");
       return;
     }
-
     try {
       await devotionalAPI.update(id, editForm);
-      toast.success('Devotional updated successfully!');
+      toast.success("Devocional actualizado");
       setEditingId(null);
       setEditForm({ title: "", content: "" });
       loadDevotionals();
     } catch (error) {
-      console.error('Error updating devotional:', error);
-      toast.error('Failed to update devotional');
+      toast.error("No se pudo actualizar");
     }
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
+    return new Date(dateString).toLocaleDateString("es-ES", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
   };
 
   if (loading) {
     return (
       <Layout>
-        <div className="max-w-4xl mx-auto space-y-6">
-          <div className="text-center">Loading devotionals...</div>
+        <div className="flex justify-center items-center h-[50vh]">
+          <Loader2 className="h-8 w-8 animate-spin text-orange-400" />
         </div>
       </Layout>
     );
@@ -126,120 +123,119 @@ const Devotionals = () => {
 
   return (
     <Layout>
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold text-spiritual">My Devotionals</h1>
+      <div className="max-w-4xl space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-orange-500/20 border border-orange-400/20">
+              <BookOpen className="w-5 h-5 text-orange-400" />
+            </div>
+            <h1 className="text-2xl font-bold">Mis Devocionales</h1>
+          </div>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-devotional hover:bg-devotional/90">
-                <Plus className="h-4 w-4 mr-2" />
-                New Devotional
-              </Button>
+              <button className="flex items-center gap-2 bg-orange-500/20 border border-orange-400/20 rounded-xl px-4 py-2 text-orange-400 text-sm font-medium hover:bg-orange-500/30 transition-all">
+                <Plus className="w-4 h-4" />
+                Nuevo
+              </button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px]">
+            <DialogContent className="sm:max-w-[600px] border-orange-400/20">
               <DialogHeader>
-                <DialogTitle>Create New Devotional</DialogTitle>
+                <DialogTitle className="text-orange-400">Nuevo Devocional</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label htmlFor="title">Title</Label>
+                  <Label htmlFor="title" className="text-muted-foreground text-sm">Título</Label>
                   <Input
                     id="title"
                     value={newDevotional.title}
                     onChange={(e) => setNewDevotional({ ...newDevotional, title: e.target.value })}
-                    placeholder="Enter devotional title"
+                    placeholder="Título del devocional"
+                    className="bg-white/5 border-white/10 focus-visible:ring-orange-400/30 focus-visible:border-orange-400/50"
                   />
                 </div>
-
                 <div className="space-y-2">
-                  <Label htmlFor="content">Content</Label>
+                  <Label htmlFor="content" className="text-muted-foreground text-sm">Contenido</Label>
                   <Textarea
                     id="content"
                     value={newDevotional.content}
                     onChange={(e) => setNewDevotional({ ...newDevotional, content: e.target.value })}
-                    placeholder="Write your devotional..."
-                    className="min-h-[200px]"
+                    placeholder="Escribe tu devocional..."
+                    className="min-h-[200px] bg-white/5 border-white/10 focus-visible:ring-orange-400/30 focus-visible:border-orange-400/50"
                   />
                 </div>
               </div>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-                  Cancel
+                  Cancelar
                 </Button>
-                <Button 
-                  className="bg-devotional hover:bg-devotional/90" 
+                <button
                   onClick={handleCreateDevotional}
                   disabled={submitting}
+                  className="flex items-center gap-2 bible-card-sunset font-medium text-sm disabled:opacity-50"
+                  style={{ borderRadius: "0.75rem", padding: "0.5rem 1rem" }}
                 >
-                  {submitting ? 'Creating...' : 'Create'}
-                </Button>
+                  {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  {submitting ? "Creando..." : "Crear"}
+                </button>
               </div>
             </DialogContent>
           </Dialog>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2">
+        {/* Cards */}
+        <div className="grid gap-4 md:grid-cols-2">
           {devotionals.length === 0 ? (
-            <div className="col-span-2 text-center py-8">
-              <p className="text-muted-foreground">No devotionals yet. Create your first one!</p>
+            <div className="col-span-2 bible-glass-card flex flex-col items-center justify-center py-14 text-center">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-orange-500/10 border border-orange-400/10 mb-4">
+                <BookOpen className="w-6 h-6 text-orange-400/40" />
+              </div>
+              <p className="text-muted-foreground">Aún no tienes devocionales.</p>
+              <p className="text-sm text-muted-foreground">¡Crea el primero!</p>
             </div>
           ) : (
             devotionals.map((devotional) => (
-              <div key={devotional.id} className="bible-glass-card border-l-4 border-l-devotional">
-                <div className="p-6 pb-0">
-                  <div className="flex justify-between items-start">
-                    <h3 className="text-lg font-semibold flex items-start gap-2">
-                      <BookOpen className="h-5 w-5 text-devotional mt-1" />
-                      {editingId === devotional.id ? (
-                        <Input
-                          value={editForm.title}
-                          onChange={(e) => setEditForm({...editForm, title: e.target.value})}
-                          className="text-lg font-semibold"
-                        />
-                      ) : (
-                        <span>{devotional.title}</span>
-                      )}
-                    </h3>
-                    <div className="flex gap-2">
+              <div key={devotional.id} className="bible-glass-card p-0 border-l-4 border-l-orange-400 overflow-hidden">
+                <div className="p-5">
+                  {/* Title row */}
+                  <div className="flex justify-between items-start gap-2 mb-3">
+                    {editingId === devotional.id ? (
+                      <Input
+                        value={editForm.title}
+                        onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                        className="text-base font-semibold"
+                      />
+                    ) : (
+                      <h3
+                        className="text-base font-semibold leading-snug cursor-pointer hover:text-orange-400 transition-colors"
+                        onClick={() => navigate(`/devotionals/${devotional.id}`)}
+                      >
+                        {devotional.title}
+                      </h3>
+                    )}
+                    <div className="flex items-center gap-1 shrink-0">
                       {editingId === devotional.id ? (
                         <>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleUpdateDevotional(devotional.id)}
-                          >
+                          <Button variant="ghost" size="sm" onClick={() => handleUpdateDevotional(devotional.id)}>
                             <Save className="h-4 w-4" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={cancelEditing}
-                          >
+                          <Button variant="ghost" size="sm" onClick={cancelEditing}>
                             <X className="h-4 w-4" />
                           </Button>
                         </>
                       ) : (
                         <>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => navigate(`/devotionals/${devotional.id}`)}
-                            title="View full devotional"
-                          >
+                          <Button variant="ghost" size="sm" onClick={() => navigate(`/devotionals/${devotional.id}`)}>
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => startEditing(devotional)}
-                          >
+                          <Button variant="ghost" size="sm" onClick={() => startEditing(devotional)}>
                             <Edit2 className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => handleDeleteDevotional(devotional.id)}
-                            className="text-red-600 hover:text-red-700"
+                            className="text-red-500 hover:text-red-400"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -247,33 +243,34 @@ const Devotionals = () => {
                       )}
                     </div>
                   </div>
-                </div>
-                <div className="p-6 pt-2">
+
+                  {/* Content */}
                   {editingId === devotional.id ? (
                     <Textarea
                       value={editForm.content}
-                      onChange={(e) => setEditForm({...editForm, content: e.target.value})}
+                      onChange={(e) => setEditForm({ ...editForm, content: e.target.value })}
                       className="min-h-[100px]"
                     />
                   ) : (
-                    <div
-                      className="cursor-pointer"
+                    <p
+                      className="text-sm text-muted-foreground leading-relaxed cursor-pointer hover:text-foreground transition-colors"
                       onClick={() => navigate(`/devotionals/${devotional.id}`)}
                     >
-                      <p className="text-muted-foreground mb-3 hover:text-foreground transition-colors">
-                        {devotional.content.length > 150
-                          ? devotional.content.substring(0, 150) + '...'
-                          : devotional.content}
-                      </p>
-                      <p className="text-sm text-spiritual hover:underline">
-                        Read more →
-                      </p>
-                    </div>
+                      {devotional.content.length > 120
+                        ? devotional.content.substring(0, 120) + "..."
+                        : devotional.content}
+                    </p>
                   )}
-                  <p className="text-sm font-medium text-spiritual mt-3">By {devotional.user.username}</p>
-                </div>
-                <div className="px-6 pb-6">
-                  <p className="text-xs text-muted-foreground">{formatDate(devotional.created_at)}</p>
+
+                  {/* Footer */}
+                  <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/5">
+                    <span className="text-xs text-muted-foreground">
+                      {devotional.user.username}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {formatDate(devotional.created_at)}
+                    </span>
+                  </div>
                 </div>
               </div>
             ))

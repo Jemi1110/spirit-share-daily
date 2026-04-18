@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, PenTool, Edit2, Trash2, Save, X, Eye } from "lucide-react";
+import { Plus, PenTool, Edit2, Trash2, Save, X, Eye, Loader2 } from "lucide-react";
 import { blogAPI } from "@/services/api";
 import { toast } from "sonner";
 
@@ -41,8 +41,7 @@ const Blog = () => {
       const data = await blogAPI.getAll();
       setArticles(data as BlogArticle[]);
     } catch (error) {
-      console.error('Error loading articles:', error);
-      toast.error('Failed to load articles');
+      toast.error("No se pudieron cargar los artículos");
     } finally {
       setLoading(false);
     }
@@ -50,35 +49,31 @@ const Blog = () => {
 
   const handleCreateArticle = async () => {
     if (!newArticle.title.trim() || !newArticle.content.trim()) {
-      toast.error('Please fill in all fields');
+      toast.error("Por favor completa todos los campos");
       return;
     }
-
     setSubmitting(true);
     try {
       await blogAPI.create(newArticle);
       setNewArticle({ title: "", content: "" });
       setIsDialogOpen(false);
-      toast.success('Article published successfully!');
+      toast.success("¡Artículo publicado!");
       loadArticles();
     } catch (error) {
-      console.error('Error creating article:', error);
-      toast.error('Failed to publish article');
+      toast.error("No se pudo publicar el artículo");
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDeleteArticle = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this article?')) return;
-
+    if (!confirm("¿Eliminar este artículo?")) return;
     try {
       await blogAPI.delete(id);
-      toast.success('Article deleted successfully!');
+      toast.success("Artículo eliminado");
       loadArticles();
     } catch (error) {
-      console.error('Error deleting article:', error);
-      toast.error('Failed to delete article');
+      toast.error("No se pudo eliminar");
     }
   };
 
@@ -94,38 +89,39 @@ const Blog = () => {
 
   const handleUpdateArticle = async (id: string) => {
     if (!editForm.title.trim() || !editForm.content.trim()) {
-      toast.error('Please fill in all fields');
+      toast.error("Por favor completa todos los campos");
       return;
     }
-
     try {
       await blogAPI.update(id, editForm);
-      toast.success('Article updated successfully!');
+      toast.success("Artículo actualizado");
       setEditingId(null);
       setEditForm({ title: "", content: "" });
       loadArticles();
     } catch (error) {
-      console.error('Error updating article:', error);
-      toast.error('Failed to update article');
+      toast.error("No se pudo actualizar");
     }
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
+    return new Date(dateString).toLocaleDateString("es-ES", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
   };
 
   const getReadTime = (content: string) => {
-    const wordsPerMinute = 200;
-    const wordCount = content.split(' ').length;
-    const readTime = Math.ceil(wordCount / wordsPerMinute);
-    return `${readTime} min read`;
+    const words = content.split(" ").length;
+    const mins = Math.ceil(words / 200);
+    return `${mins} min`;
   };
 
   if (loading) {
     return (
       <Layout>
-        <div className="max-w-4xl mx-auto space-y-6">
-          <div className="text-center">Loading articles...</div>
+        <div className="flex justify-center items-center h-[50vh]">
+          <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
         </div>
       </Layout>
     );
@@ -133,121 +129,119 @@ const Blog = () => {
 
   return (
     <Layout>
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold text-spiritual">Blog & Reflections</h1>
+      <div className="max-w-4xl space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400/20">
+              <PenTool className="w-5 h-5 text-emerald-400" />
+            </div>
+            <h1 className="text-2xl font-bold">Blog & Reflexiones</h1>
+          </div>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-spiritual hover:bg-spiritual/90">
-                <Plus className="h-4 w-4 mr-2" />
-                Write Article
-              </Button>
+              <button className="flex items-center gap-2 bg-emerald-500/20 border border-emerald-400/20 rounded-xl px-4 py-2 text-emerald-400 text-sm font-medium hover:bg-emerald-500/30 transition-all">
+                <Plus className="w-4 h-4" />
+                Escribir
+              </button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[700px]">
+            <DialogContent className="sm:max-w-[700px] border-emerald-400/20">
               <DialogHeader>
-                <DialogTitle>Write New Article</DialogTitle>
+                <DialogTitle className="text-emerald-400">Nuevo Artículo</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label htmlFor="article-title">Title</Label>
+                  <Label htmlFor="article-title" className="text-muted-foreground text-sm">Título</Label>
                   <Input
                     id="article-title"
                     value={newArticle.title}
                     onChange={(e) => setNewArticle({ ...newArticle, title: e.target.value })}
-                    placeholder="Enter article title"
+                    placeholder="Título del artículo"
+                    className="bg-white/5 border-white/10 focus-visible:ring-emerald-400/30 focus-visible:border-emerald-400/50"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="article-content">Content</Label>
+                  <Label htmlFor="article-content" className="text-muted-foreground text-sm">Contenido</Label>
                   <Textarea
                     id="article-content"
                     value={newArticle.content}
                     onChange={(e) => setNewArticle({ ...newArticle, content: e.target.value })}
-                    placeholder="Share your thoughts and reflections..."
-                    className="min-h-[300px]"
+                    placeholder="Comparte tus pensamientos y reflexiones..."
+                    className="min-h-[300px] bg-white/5 border-white/10 focus-visible:ring-emerald-400/30 focus-visible:border-emerald-400/50"
                   />
                 </div>
               </div>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-                  Cancel
+                  Cancelar
                 </Button>
-                <Button 
-                  className="bg-spiritual hover:bg-spiritual/90" 
+                <button
                   onClick={handleCreateArticle}
                   disabled={submitting}
+                  className="flex items-center gap-2 bible-card-green font-medium text-sm disabled:opacity-50"
+                  style={{ borderRadius: "0.75rem", padding: "0.5rem 1rem" }}
                 >
-                  {submitting ? 'Publishing...' : 'Publish'}
-                </Button>
+                  {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  {submitting ? "Publicando..." : "Publicar"}
+                </button>
               </div>
             </DialogContent>
           </Dialog>
         </div>
 
-        <div className="space-y-6">
+        {/* Articles */}
+        <div className="space-y-4">
           {articles.length === 0 ? (
-            <div className="bible-glass-card">
-              <div className="p-6 text-center">
-                <p className="text-muted-foreground">No articles yet. Write your first one!</p>
+            <div className="bible-glass-card flex flex-col items-center justify-center py-14 text-center">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-400/10 mb-4">
+                <PenTool className="w-6 h-6 text-emerald-400/40" />
               </div>
+              <p className="text-muted-foreground">Aún no hay artículos.</p>
+              <p className="text-sm text-muted-foreground">¡Escribe el primero!</p>
             </div>
           ) : (
             articles.map((article) => (
-              <div key={article.id} className="bible-glass-card">
-                <div className="p-6 pb-0">
-                  <div className="flex justify-between items-start">
-                    <h3 className="text-xl font-semibold flex items-start gap-2">
-                      <PenTool className="h-5 w-5 text-spiritual mt-1" />
-                      {editingId === article.id ? (
-                        <Input
-                          value={editForm.title}
-                          onChange={(e) => setEditForm({...editForm, title: e.target.value})}
-                          className="text-xl font-semibold"
-                        />
-                      ) : (
-                        <span>{article.title}</span>
-                      )}
-                    </h3>
-                    <div className="flex gap-2">
+              <div key={article.id} className="bible-glass-card p-0 overflow-hidden">
+                <div className="p-5">
+                  {/* Title row */}
+                  <div className="flex justify-between items-start gap-2 mb-3">
+                    {editingId === article.id ? (
+                      <Input
+                        value={editForm.title}
+                        onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                        className="text-base font-semibold"
+                      />
+                    ) : (
+                      <h3
+                        className="text-lg font-semibold leading-snug cursor-pointer hover:text-emerald-400 transition-colors"
+                        onClick={() => navigate(`/blog/${article.id}`)}
+                      >
+                        {article.title}
+                      </h3>
+                    )}
+                    <div className="flex items-center gap-1 shrink-0">
                       {editingId === article.id ? (
                         <>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleUpdateArticle(article.id)}
-                          >
+                          <Button variant="ghost" size="sm" onClick={() => handleUpdateArticle(article.id)}>
                             <Save className="h-4 w-4" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={cancelEditing}
-                          >
+                          <Button variant="ghost" size="sm" onClick={cancelEditing}>
                             <X className="h-4 w-4" />
                           </Button>
                         </>
                       ) : (
                         <>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => navigate(`/blog/${article.id}`)}
-                            title="View full article"
-                          >
+                          <Button variant="ghost" size="sm" onClick={() => navigate(`/blog/${article.id}`)}>
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => startEditing(article)}
-                          >
+                          <Button variant="ghost" size="sm" onClick={() => startEditing(article)}>
                             <Edit2 className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => handleDeleteArticle(article.id)}
-                            className="text-red-600 hover:text-red-700"
+                            className="text-red-500 hover:text-red-400"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -255,42 +249,44 @@ const Blog = () => {
                       )}
                     </div>
                   </div>
-                </div>
-                <div className="p-6 pt-2">
+
+                  {/* Content */}
                   {editingId === article.id ? (
                     <Textarea
                       value={editForm.content}
-                      onChange={(e) => setEditForm({...editForm, content: e.target.value})}
+                      onChange={(e) => setEditForm({ ...editForm, content: e.target.value })}
                       className="min-h-[200px]"
                     />
                   ) : (
-                    <>
-                      <p className="text-muted-foreground mb-4">
-                        {article.content.length > 200
-                          ? article.content.substring(0, 200) + '...'
-                          : article.content}
-                      </p>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span>{article.user.username}</span>
-                        <span>•</span>
-                        <span>{formatDate(article.created_at)}</span>
-                        <span>•</span>
-                        <span>{getReadTime(article.content)}</span>
-                      </div>
-                    </>
-                  )}
-                </div>
-                {editingId !== article.id && (
-                  <div className="px-6 pb-6">
-                    <Button
-                      variant="ghost"
-                      className="text-spiritual hover:text-spiritual/90"
+                    <p
+                      className="text-sm text-muted-foreground leading-relaxed cursor-pointer hover:text-foreground transition-colors"
                       onClick={() => navigate(`/blog/${article.id}`)}
                     >
-                      Read More →
-                    </Button>
-                  </div>
-                )}
+                      {article.content.length > 200
+                        ? article.content.substring(0, 200) + "..."
+                        : article.content}
+                    </p>
+                  )}
+
+                  {/* Footer */}
+                  {editingId !== article.id && (
+                    <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/5">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>{article.user.username}</span>
+                        <span>·</span>
+                        <span>{formatDate(article.created_at)}</span>
+                        <span>·</span>
+                        <span>{getReadTime(article.content)} lectura</span>
+                      </div>
+                      <button
+                        onClick={() => navigate(`/blog/${article.id}`)}
+                        className="text-xs text-emerald-400 hover:text-emerald-300 font-medium transition-colors"
+                      >
+                        Leer más →
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             ))
           )}
